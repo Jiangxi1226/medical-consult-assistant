@@ -1,0 +1,53 @@
+{
+  "interactions": [
+    {
+      "id": "INT_ANTICOAG_NSAID",
+      "risk": "出血风险显著增高",
+      "action": "抗凝药（华法林/氯吡格雷）与非甾体抗炎药（布洛芬/阿司匹林）联用会显著增加消化道及颅内出血风险，须由医生评估，勿自行联用。",
+      "severity": "high",
+      "drugs": ["华法林", "氯吡格雷", "阿司匹林", "布洛芬"]
+    },
+    {
+      "id": "INT_ANTICOAG_ANTIPLATELET",
+      "risk": "抗凝/抗血小板叠加增加出血",
+      "action": "华法林与氯吡格雷双联抗栓可增加出血风险，需医生权衡，注意出血征象。",
+      "severity": "high",
+      "drugs": ["华法林", "氯吡格雷", "阿司匹林"]
+    },
+    {
+      "id": "INT_SSRI_MAOI",
+      "risk": "五羟色胺综合征风险",
+      "action": "SSRI 类（氟西汀/帕罗西汀）与单胺氧化酶抑制剂联用可致五羟色胺综合征，可能危及生命。",
+      "severity": "high",
+      "drugs": ["氟西汀", "帕罗西汀", "SSRI"]
+    },
+    {
+      "id": "INT_STATIN_FIBRATE",
+      "risk": "横纹肌溶解风险",
+      "action": "他汀类与贝特类降脂药联用可增加肌病/横纹肌溶解风险，出现肌肉酸痛应及时就医。",
+      "severity": "medium",
+      "drugs": ["他汀", "贝特"]
+    },
+    {
+      "id": "INT_ACEI_ARB",
+      "risk": "肾功能受损与高血钾",
+      "action": "普利类与沙坦类联用可能增加肾功能损害和高血钾风险，通常不建议常规联用。",
+      "severity": "medium",
+      "drugs": ["普利", "沙坦"]
+    },
+    {
+      "id": "INT_ANTIBIOTIC_METRONIDAZOLE",
+      "risk": "双疏仑样反应",
+      "action": "头孢类与甲硝唑（以及含酒精制剂）联用可致双疏仑样反应（脸红、头痛、心悸）。",
+      "severity": "medium",
+      "drugs": ["头孢", "甲硝唑"]
+    },
+    {
+      "id": "INT_DIGOXIN_DIURETIC",
+      "risk": "电解质紊乱与洋地黄中毒",
+      "action": "地高辛与利尿剂联用可因低钾诱发洋地黄中毒，出现恶心、黄视应就医。",
+      "severity": "medium",
+      "drugs": ["地高辛", "利尿剂"]
+    }
+  ]
+}

@@ -1,13 +1,22 @@
+# —— Python 缓存 ——
 __pycache__/
 .pytest_cache/
 *.pyc
 *.pyo
+
+# —— 密钥：只在本地 .env，绝不入库 ——
 .env
+
+# —— 隐私 / 运行时数据：会诊审计、历史评估结果、日志，都不入库 ——
 *.log
 *.jsonl
 data/audit.jsonl
 eval/results.json
+
+# —— 虚拟环境 / 系统文件 ——
 venv/
 .venv/
 .DS_Store
 Thumbs.db
+
+# 注意：data/kb/*.json 是【业务知识库】（红旗/禁忌/症状），必须入库，不要忽略。

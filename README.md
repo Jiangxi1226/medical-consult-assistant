@@ -191,9 +191,12 @@ medical_assistant/
 ├── utils/
 │   ├── audit.py           #   审计日志
 │   ├── json_utils.py      #   分层严格 JSON 解析
-│   ├── kb_loader.py       #   知识库加载（红旗 / 禁忌库）
-│   └── security.py        #   限流器
-├── eval/                  # 会诊质量评估（红旗 / 禁忌 / 结构化）
+│   ├── kb_loader.py       #   知识库加载（红旗 / 禁忌 / 症状）
+│   └── security.py        #   注入检测 / 限流器
+├── data/
+│   └── kb/                # 业务知识库（必须入库）：红旗 / 禁忌 / 症状规则
+├── eval/                  # 会诊质量评估（红旗 / 禁忌 / 结构化）+ 用例集
+├── tests/                 # pytest 回归测试（知识库 / 严格JSON / 注入防护 / 限流）
 └── README.md
 ```
 
@@ -208,7 +211,14 @@ medical_assistant/
 | 结构化输出 | 合法 JSON 落盘率 | 严格校验，绝不悄悄降级 |
 | 会诊覆盖 | 多科并行同步评估 | 无阻塞、高效汇诊 |
 
-配套 `eval/run_eval.py` + `eval/cases.json` 评估用例，验证红旗召回、禁忌拦截、结构化合规。
+### 知识库数据（启动必需）
+
+`data/kb/` 下的三个 JSON（红症状库 / 用药禁忌库 / 症状→科室映射）是**业务知识库**，规则层在会诊前先做硬校验（不依赖 LLM），因此是**启动必需**、随仓库入库。缺失会让 `check_red_flags` 等直接抛错导致会诊中断。
+
+### 评估与回归测试
+
+- **离线规则评估**（无需 LLM）：`python -m pytest tests/ -v`，覆盖红旗召回/误报、联用检出、分层严格 JSON 的 GATE 判定、注入防护、限流器，全部为纯逻辑测试。
+- **端到端评估**（需 LLM）：`python eval/run_eval.py`，跑 `eval/cases.json` 用例集，量化红旗召回率、紧急误报率、科室命中率、降级样例数，结果落盘 `eval/results.json`（该文件为运行产物，已被 `.gitignore` 忽略）。
 
 ---
 

@@ -1,0 +1,114 @@
+{
+  "internal": [
+    {
+      "id": "SYM_CV_001",
+      "name": "冠状动脉性心脏病 / 心绞痛",
+      "symptoms": ["胸痛", "胸闷", "心前区", "压榨", "心悸", "活动后", "出冷汗"],
+      "evidence": "胸痛/胸闷等心前区症状",
+      "advice": "建议完善心电图、心肌酶，排除心源性疾病。",
+      "department": "心血管内科",
+      "priority": "high"
+    },
+    {
+      "id": "SYM_RESP_001",
+      "name": "上呼吸道感染",
+      "symptoms": ["咳嗽", "嗓子疼", "喉咙痛", "鼻塞", "流鼻涕", "咽痛"],
+      "evidence": "上呼吸道卡他症状",
+      "advice": "多休息饮水，发热可对症；持续加重建议就诊。",
+      "department": "呼吸内科",
+      "priority": "low"
+    },
+    {
+      "id": "SYM_GI_001",
+      "name": "胃炎 / 消化性溃疡",
+      "symptoms": ["上腹痛", "反酸", "烧心", "胃胀", "吃了东西", "嗳气", "恶心"],
+      "evidence": "上腹不适伴反酸烧心",
+      "advice": "规律饮食，必要时查幽门螺杆菌与胃镜。",
+      "department": "消化内科",
+      "priority": "medium"
+    },
+    {
+      "id": "SYM_GI_002",
+      "name": "急性胃肠炎",
+      "symptoms": ["拉肚子", "腹泻", "腹痛跑厕所", "水样便", "呕吐", "恶心想吐", "发烧", "人有点虚"],
+      "evidence": "腹泻伴发热/查体虚",
+      "advice": "补液防脱水；症状重或血水样便及时就医。",
+      "department": "消化内科",
+      "priority": "medium"
+    },
+    {
+      "id": "SYM_RESP_002",
+      "name": "肺部感染 / 支气管炎",
+      "symptoms": ["咳嗽有痰", "发烧", "咳黄痰", "呼吸急促", "胸痛"],
+      "evidence": "咳痰发热",
+      "advice": "建议胸片检查，必要时抗感染治疗。",
+      "department": "呼吸内科",
+      "priority": "medium"
+    },
+    {
+      "id": "SYM_ENDO_001",
+      "name": "心律失常",
+      "symptoms": ["心悸", "心慌", "胸闷", "心跳快", "心动过速", "熬夜多"],
+      "evidence": "心悸/心慌主诉",
+      "advice": "建议做心电图或 24h 动态心电图排除心律失常。",
+      "department": "心血管内科",
+      "priority": "medium"
+    }
+  ],
+  "surgical": [
+    {
+      "id": "SYM_ORTHO_001",
+      "name": "骨关节炎 / 关节退变",
+      "symptoms": ["膝盖疼", "膝关节", "僵硬", "早起僵硬", "上下楼疼", "关节弹响"],
+      "evidence": "膝/骨关节疼痛伴晨僵",
+      "advice": "建议拍片评估，注意关节保暖与减负。",
+      "department": "骨科",
+      "priority": "medium"
+    },
+    {
+      "id": "SYM_ORTHO_002",
+      "name": "软组织损伤 / 扭伤",
+      "symptoms": ["打球", "扭", "崴", "肿痛", "小腿肿", "走路疼", "拉伤", "挫伤"],
+      "evidence": "运动后局部肿痛",
+      "advice": "急性期冰敷制动，必要时拍片排除骨折/韧带撕裂。",
+      "department": "骨科",
+      "priority": "medium"
+    },
+    {
+      "id": "SYM_ABD_001",
+      "name": "急性阑尾炎 / 急腹症",
+      "symptoms": ["小腹痛", "右下腹痛", "转移到右下", "发烧", "反跳痛", "想吐", "呕吐"],
+      "evidence": "转移性右腹痛伴发热",
+      "advice": "疑似急腹症，请尽快外科或急诊评估，避免延误。",
+      "department": "普外科",
+      "priority": "high"
+    },
+    {
+      "id": "SYM_ABD_002",
+      "name": "泌尿系结石",
+      "symptoms": ["腰腹痛", "肾区痛", "绞痛", "血尿", "尿痛"],
+      "evidence": "腰腹绞痛伴血尿",
+      "advice": "建议泌尿外科检查（超声/CT）。",
+      "department": "泌尿外科",
+      "priority": "medium"
+    },
+    {
+      "id": "SYM_ABD_003",
+      "name": "胆囊炎 / 胆结石",
+      "symptoms": ["右上腹痛", "油腻", "胆囊区", "进餐后疼", "右肩放射"],
+      "evidence": "右上腹疼痛与进食相关",
+      "advice": "建议肝胆超声；反复发作咨询外科。",
+      "department": "肝胆外科",
+      "priority": "medium"
+    },
+    {
+      "id": "SYM_ORTHO_003",
+      "name": "肩颈软组织问题 / 颈椎病",
+      "symptoms": ["脖子疼", "颈椎", "肩颈", "肩膀酸", "头晕转头"],
+      "evidence": "颈肩部酸痛",
+      "advice": "避免久低头，做颈肩放松；必要时骨科/康复科评估。",
+      "department": "骨科",
+      "priority": "low"
+    }
+  ]
+}
