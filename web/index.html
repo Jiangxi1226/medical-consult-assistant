@@ -1,0 +1,349 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>智能辅助就医会诊助手</title>
+<style>
+:root{--primary:#1274b8;--primary-dark:#0d5e97;--bg:#eef3f7;--card:#fff;--ink:#22303c;--sub:#66727e;--line:#e2e9ee;--red:#c0392b;--amber:#b7791f;--green:#1f9372;--radius:14px}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;background:var(--bg);color:var(--ink);font-size:15px;height:100vh;display:flex;flex-direction:column;-webkit-font-smoothing:antialiased}
+header{background:var(--card);color:var(--ink);border-bottom:1px solid var(--line);padding:18px 28px;display:flex;align-items:center;gap:14px;flex-shrink:0;box-shadow:0 2px 10px rgba(18,60,90,.05)}
+header .logo{width:40px;height:40px;border-radius:11px;background:linear-gradient(135deg,var(--primary),#1a92d4);display:flex;align-items:center;justify-content:center;color:#fff;flex-shrink:0;box-shadow:0 3px 8px rgba(18,116,184,.28)}
+header .logo svg{display:block}
+header .brand{display:flex;flex-direction:column}
+header .brand b{font-size:17px;letter-spacing:.3px;font-weight:600;color:#16303f}
+header .brand small{font-weight:400;color:var(--sub);font-size:12px;margin-top:2px}
+header .brand{margin-right:auto}
+.hdr-gear{margin-left:12px;display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 12px;border-radius:9px;border:1px solid var(--line);background:#fff;color:var(--sub);font-size:13px;font-weight:500;cursor:pointer;transition:.15s;flex-shrink:0}
+.hdr-gear:hover{color:var(--primary);border-color:#bcdaf2;background:#eef6fc}
+.hdr-gear .ic{font-size:15px;line-height:1}
+.hdr-gear.unset{color:#b45309;border-color:#fcd9a0;background:#fff8ec}
+.set-form{display:flex;flex-direction:column;gap:13px;margin-top:4px}
+.set-form label{font-size:12.5px;font-weight:600;color:#334;margin-bottom:5px;display:block}
+.set-form input{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-size:13.5px}
+.set-form input:focus{outline:2px solid #bcdaf2;border-color:var(--primary)}
+.set-form input[type=password]{letter-spacing:1px}
+.set-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}
+.set-msg{font-size:12.5px;margin-top:10px;min-height:18px}
+.set-msg.ok{color:var(--green)}
+.set-msg.err{color:var(--red)}
+.set-overlay{position:fixed;inset:0;background:rgba(24,38,54,.5);display:none;align-items:center;justify-content:center;z-index:999;padding:20px}
+.set-overlay.show{display:flex}
+.set-box{width:min(440px,92vw);background:#fff;border-radius:16px;padding:22px 24px;box-shadow:0 20px 60px rgba(10,30,55,.35)}
+.set-title{font-size:16px;font-weight:700;color:#16303f;margin-bottom:14px}
+.btn{background:linear-gradient(135deg,var(--primary),#1a92d4);color:#fff;border:none;border-radius:10px;padding:11px 22px;font-size:14px;font-weight:600;cursor:pointer;box-shadow:0 3px 10px rgba(18,116,184,.22);transition:.15s}
+.btn:hover{filter:brightness(1.06)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn.ghost{background:#fff;color:var(--ink);border:1px solid var(--line);box-shadow:none}main{flex:1;display:flex;flex-direction:column;max-width:880px;margin:0 auto;width:100%;padding:24px 20px;min-height:0;gap:14px}
+#chat{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:12px;padding:4px;min-height:0}
+.msg{max-width:90%;padding:14px 18px;border-radius:var(--radius);line-height:1.75;word-break:break-word;animation:up .3s ease}
+@keyframes up{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.msg.user{background:linear-gradient(135deg,var(--primary),#1a92d4);color:#fff;align-self:flex-end;border-bottom-right-radius:4px;box-shadow:0 3px 10px rgba(18,116,184,.18)}
+.msg.bot{background:var(--card);align-self:flex-start;border:1px solid var(--line);border-bottom-left-radius:4px;width:100%;box-shadow:0 2px 8px rgba(20,50,80,.04)}
+.msg.bot .head{font-size:12px;color:var(--sub);font-weight:600;margin-bottom:10px;display:flex;align-items:center;gap:7px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+.msg.bot .head .dot{width:7px;height:7px;background:var(--primary);border-radius:50%;animation:pulse 1.6s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.urgent{background:#fdf4f2;border:1px solid #f6d8d2;border-radius:12px;padding:12px 14px;margin:4px 0 12px;color:var(--red);font-weight:600;font-size:14px}
+.card{border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin-top:12px;background:var(--card);box-shadow:0 2px 8px rgba(20,50,80,.03)}
+.card h4{font-size:13px;color:var(--primary);margin-bottom:8px;font-weight:600;letter-spacing:.4px;text-transform:uppercase}
+.card p{font-size:14px;color:#38434d;margin:4px 0}
+.card .rowline{font-size:15px;line-height:1.75;color:#22303c;font-weight:500}
+.disc{font-size:12px;color:var(--sub);margin-top:12px;border-top:1px dashed var(--line);padding-top:8px;line-height:1.7}
+.degraded{color:var(--amber);font-size:12px;margin-top:8px}
+input{flex:1;padding:14px 18px;border:1px solid var(--line);border-radius:12px;font-size:15px;outline:none;transition:border-color .15s ease;background:var(--card);color:var(--ink)}
+input:focus{border-color:var(--primary)}
+input:disabled{background:#eef1f4}
+button{padding:13px 26px;border:none;border-radius:12px;background:var(--primary);color:#fff;font-weight:600;cursor:pointer;font-size:15px;transition:background .15s ease,transform .05s ease}
+button:hover{background:var(--primary-dark)}
+button:active{transform:translateY(1px)}
+button:disabled{background:#b7c4cd;cursor:not-allowed}
+.row{display:flex;gap:10px;padding:8px 0 2px}
+/* —— 问诊卡：一次一题、先选后「确定」、可自由描述 —— */
+.askq{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-top:12px}
+.askq .q{font-size:14px;font-weight:600;color:var(--ink);margin-bottom:10px}
+.askq .multi{font-size:11px;font-weight:400;color:var(--sub);border:1px solid var(--line);border-radius:8px;padding:1px 8px;margin-left:8px;vertical-align:2px}
+.askq .opts{display:flex;gap:9px;flex-wrap:wrap}
+.askq .opt{font-size:13px;padding:8px 16px;border-radius:11px;border:1px solid var(--line);background:var(--bg);color:var(--ink);cursor:pointer;transition:all .15s ease}
+.askq .opt:hover{border-color:var(--primary);background:#f2f7fb}
+.askq .opt.sel{border-color:var(--primary);background:var(--primary);color:#fff;box-shadow:0 2px 6px rgba(18,116,184,.2)}
+.askq .free-txt{width:100%;margin-top:10px;padding:11px 14px;border:1px solid var(--line);border-radius:10px;font-size:14px;background:var(--bg);color:var(--ink);outline:none;transition:border-color .15s ease}
+.askq .free-txt:focus{border-color:var(--primary);background:var(--card)}
+.askq .confirm{display:inline-block;margin-top:12px;padding:9px 24px;border:none;border-radius:10px;background:var(--green);color:#fff;font-weight:600;cursor:pointer;font-size:13px;opacity:.45;pointer-events:none;transition:opacity .15s ease}
+.askq .confirm.ready{opacity:1;pointer-events:auto}
+.askq .confirm.ready:hover{filter:brightness(1.08)}
+.askdone{font-size:12px;color:var(--sub);margin-top:10px}
+.status{font-size:12px;color:var(--sub);margin-top:8px}
+.status.eta{color:var(--green);font-weight:600;background:#e5f5f0;border-radius:8px;padding:5px 10px;display:inline-block}
+.pdfbtn{border:none;border-radius:11px;background:var(--green);color:#fff;font-weight:600;padding:12px 24px;cursor:pointer;font-size:14px;transition:filter .15s ease}
+.pdfbtn:hover{filter:brightness(1.08)}
+/* —— 各科分析折叠：结论卡下方按钮，点开弹窗 —— */
+.seccards{display:flex;flex-wrap:wrap;gap:9px;margin-top:14px}
+.seccard-btn{font-size:13px;padding:9px 16px;border:1px solid var(--line);border-radius:11px;background:#f7fafc;color:var(--ink);cursor:pointer;transition:all .15s ease;box-shadow:0 1px 3px rgba(20,50,80,.04)}
+.seccard-btn:hover{border-color:var(--primary);background:#eef6fc;color:var(--primary)}
+.seccard-btn b{font-weight:600}
+.seccard-btn span{color:var(--sub);font-size:12px;margin-left:4px}
+/* 弹窗 */
+.ovl{position:fixed;inset:0;background:rgba(20,24,30,.45);display:flex;align-items:center;justify-content:center;z-index:200;min-height:100vh}
+.modal{background:var(--card);border-radius:14px;max-width:720px;width:92%;max-height:82vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.25)}
+.modal .mhead{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--line);flex-shrink:0}
+.modal .mhead b{font-size:15px;flex:1}
+.modal .mclose{border:none;background:var(--bg);color:var(--sub);font-size:22px;width:32px;height:32px;border-radius:8px;cursor:pointer;line-height:1}
+.modal .mclose:hover{background:#eceff2;color:var(--ink)}
+.modal .mbody{padding:16px 20px;overflow-y:auto;font-size:14px;color:#383d44;white-space:pre-wrap;line-height:1.75}
+@media print{.ovl{position:static;background:#fff}.modal{max-height:none;box-shadow:none;border:1px solid #eee}.modal .mhead{display:none}.modal .mbody{overflow:visible;white-space:pre-wrap;color:#000;background:#fff}}
+</style></head><body>
+<header><div class="logo"><svg viewBox="0 0 24 24" width="22" height="22" fill="none">
+    <path d="M12 3.5C8.2 3.5 5.2 6.4 5.2 9.8c0 3.4 2.9 6.3 6.8 10 3.9-3.7 6.8-6.6 6.8-10C18.8 6.4 15.8 3.5 12 3.5z" stroke="#fff" stroke-width="1.6"/>
+    <path d="M6.6 11h2.6l1.4-2.4 1.9 3.6 1.4-2.2h2.5" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  </svg></div><div class="brand"><b>智能辅助就医会诊助手</b><small>AI 辅助 · 仅供就医参考</small></div>
+  <button class="hdr-gear unset" id="hdr-gear" onclick="openSettings()" title="设置 API 密钥"><span class="ic">⚙</span><span class="txt">API配置</span></button></header>
+<!-- 设置(API)弹窗 -->
+<div class="set-overlay" id="set-mask" onclick="if(event.target===this)closeSettings()">
+  <div class="set-box">
+    <div class="set-title">API 配置</div>
+    <div class="set-form">
+      <div><label>API Key<span style="color:var(--red);font-weight:700;margin-left:2px">*</span></label>
+        <input type="password" id="set-key" placeholder="sk-..." autocomplete="off"></div>
+      <div><label>API Base URL<span style="color:var(--red);font-weight:700;margin-left:2px">*</span></label><input type="text" id="set-base" placeholder="如 https://api.deepseek.com 或任意 OpenAI 兼容端点"></div>
+      <div><label>模型名<span style="color:var(--red);font-weight:700;margin-left:2px">*</span></label><input type="text" id="set-model" placeholder="如 deepseek-chat / qwen-plus / 你的模型名"></div>
+      <div id="set-msg" class="set-msg ok"></div>
+    </div>
+    <div class="set-actions"><button class="btn ghost" onclick="closeSettings()">取消</button>
+      <button class="btn" id="set-save" onclick="saveSettings()">保存</button></div>
+  </div>
+</div>
+<main>
+  <div id="chat"></div>
+  <div class="row">
+    <input id="in" placeholder="" onkeydown="if(event.key==='Enter')send()">
+    <button id="btn" onclick="send()">开始会诊</button>
+  </div>
+</main>
+<script>
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const PH={internal:'内科',surgical:'外科 / 骨科',pharmacy:'药剂核对',risk:'风险提示'};
+let busy=false;
+// —— 多轮问诊：chief=首轮主诉，ctx=后续"问→答"累积的全部病史；askBot=当前复用的同一气泡 ——
+let chief='', ctx='', askBot=null;
+function addUser(t){const d=document.createElement('div');d.className='msg user';d.textContent=t;$('#chat').appendChild(d);scroll();return d}
+function addBot(){const d=document.createElement('div');d.className='msg bot';d.innerHTML='<div class="head"><span class="dot"></span>分析中…</div>';$('#chat').appendChild(d);scroll();return d}
+function scroll(){$('#chat').scrollTop=$('#chat').scrollHeight}
+
+/* 主入口：answer=本轮文本(首轮为主诉，后续轮通常空、靠 context 带病史)；fresh=是否新会话。 */
+async function ask(answer, fresh){
+  if(busy)return;
+  if(fresh){chief='';ctx='';askBot=null;}
+  const u=(answer||'').trim();
+  if(!fresh && (u==='' && ctx==='' && chief==='')){return;}
+  if(u)addUser(u);
+  $('#in').value='';$('#in').disabled=true;$('#btn').disabled=true;busy=true;
+  if(fresh || !askBot){ askBot=addBot(); }
+  const bot=askBot;
+  // 复用同一气泡时，上次「追问/会诊」可能已改写 .head 文案并移除其中的 .dot；
+  // 这里只需恢复"分析中"文案，dot 若已被删则跳过（可选链），不再崩溃。
+  bot.querySelector('.head').textContent='分析中…';
+  const dot=bot.querySelector('.dot'); if(dot)dot.hidden=true;
+  if(!chief){ chief=(u||'')||chief; }
+  const payload={query:u, context:ctx};
+  let finalDone=false;
+  // 各科分析改为"内存累积、按钮弹窗展示"，不再一页铺满：key=phase，value=该科完整文本。
+  let secText={};
+
+  // —— 状态行：分析期间显示"正在分析，请稍候…"（不加倒计时） ——
+  const statusEl=document.createElement('div');statusEl.className='status';bot.insertAdjacentElement('beforeend',statusEl);
+  const startEta=()=>{ statusEl.classList.add('eta'); statusEl.textContent='正在分析，请稍候…'; };
+  const stopEta=()=>{ statusEl.classList.remove('eta'); statusEl.textContent=''; };
+  const note=(t)=>{statusEl.classList.remove('eta');statusEl.textContent=t;};
+
+  // 提交下一轮：带全部病史重新 POST（后端决定继续追问还是会诊）；若 busy 则延迟重试。
+  const askNext=()=>{ if(busy){ setTimeout(askNext, 250); return; } ask('', false); };
+  let qList=[], qIdx=0;
+  function renderNext(){ if(qIdx<qList.length){ renderQ(qList[qIdx++]); return true;} return false; }
+
+  /* 渲染一题：可选选项(多选) + 卡内输入框(可打字补充) + 「确定」按钮。
+     选中任一选项或输入框有文字即可点确定；确定后合并「已选选项、输入内容」为答案。 */
+  const renderQ=(q)=>{
+    const card=document.createElement('div');card.className='askq';
+    card.innerHTML=`<div class="q"></div><div class="opts"></div><input class="free-txt" type="text" placeholder="或直接输入" autocomplete="off"><br><button class="confirm">确定</button>`;
+    card.querySelector('.q').textContent=esc(q.text);
+    card.querySelector('.q').insertAdjacentHTML('beforeend','<span class="multi">可多选</span>');
+    const opts=card.querySelector('.opts');
+    const txt=card.querySelector('.free-txt');
+    const confirmBtn=card.querySelector('.confirm');
+    // 多选 + 输入框：sel=已选选项数组；输入框文字作为补充项。
+    let sel=[];
+    const picked=()=>sel.length>0 || txt.value.trim().length>0;
+    const ready=()=>confirmBtn.classList.toggle('ready', picked());
+    const record=()=>{
+      const items=[...sel]; const extra=txt.value.trim(); if(extra) items.push(extra);
+      const ans=items.join('、');
+      if(!ans)return;
+      ctx+='问：「'+q.text+'」答："'+ans+'"。';
+      card.querySelectorAll('.opt').forEach(o=>o.classList.remove('sel'));
+      card.querySelector('.confirm').remove();
+      card.querySelector('.opts').remove();
+      card.querySelector('.free-txt').remove();
+      card.insertAdjacentHTML('beforeend',`<div class="askdone">已记录 ✓</div>`);
+      if(!renderNext()) askNext();  // 全部问完 → 自动进入会诊
+    };
+    (q.options||[]).forEach(o=>{const b=document.createElement('button');b.className='opt';b.textContent=o;b.onclick=()=>{b.classList.toggle('sel');if(b.classList.contains('sel')){sel.push(o);}else{sel=sel.filter(x=>x!==o);}ready();};opts.append(b);});
+    txt.addEventListener('input',ready);
+    txt.addEventListener('keydown',e=>{ if(e.key==='Enter'&&picked()){e.preventDefault();record();} });
+    confirmBtn.onclick=()=>{ if(picked()) record(); };
+    bot.insertAdjacentElement('beforeend',card);scroll();
+    return card;
+  };
+
+  // —— 解析 SSE：逐行累积 event/data，遇空行回调 ——
+  let evt='', dataLines=[];
+  const handle=(line)=>{
+    const t=line.trim();
+    if(t===''){ if(dataLines.length){ const d=JSON.parse(dataLines.join('\n'));
+      if(evt==='token'){ secText[d.phase]=(secText[d.phase]||'')+d.t; }
+      else if(evt==='urgent'){bot.insertAdjacentHTML('beforeend','<div class="urgent">⚠️ '+esc((d.red_flags||[]).join('、'))+'<br>'+esc(d.advice||'请立即就医')+'</div>');}
+      else if(evt==='ask'){ stopEta(); note('请回答下面的问题'); bot.querySelector('.head').textContent='追问'; if(!/主诉：/.test(ctx))ctx=(ctx?ctx:'')+'主诉：'+(chief||u)+'。'; qList=d.questions||[]; qIdx=0; if(!renderNext())askNext(); }
+      else if(evt==='final'){stopEta();finalDone=true;bot.querySelector('.head').textContent='会诊结论';renderFinal(bot,d,secText);}
+      else if(evt==='warn'){bot.insertAdjacentHTML('beforeend','<div class="degraded">⚠️ '+esc(d.message)+'</div>');}
+      else if(evt==='error'){stopEta();bot.insertAdjacentHTML('beforeend','<div class="degraded">❌ '+esc(d.error)+'</div>');}
+    } evt='';dataLines=[]; }
+    else if(t.startsWith('event:')){evt=t.slice(6).trim();}
+    else if(t.startsWith('data:')){dataLines.push(t.slice(5).replace(/^\s+/,''));}
+  };
+
+  try{
+    const r=await fetch('/api/v1/consult/stream',{method:'POST',headers:{'Content-Type':'application/json','Accept':'text/event-stream'},body:JSON.stringify(payload)});
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    // 分析期间显示静态"正在分析，请稍候…"提示。
+    // （真浏览器对 SSE 端点的 getReader 偶发收到 0 字节导致"没反应"，text() 稳定拿到完整 SSE，故用 text()。）
+    startEta();
+    const txt=await r.text();
+    for(const ln of txt.split('\n')) handle(ln.replace(/\r$/,''));
+    stopEta(); scroll();
+    if(!finalDone && !bot.querySelector('.askq, .urgent, .degraded')){ bot.querySelector('.head').textContent='未完成'; bot.insertAdjacentHTML('beforeend','<div class="degraded">本次未生成结论，请重试或补充信息。</div>'); }
+  }catch(e){ stopEta(); bot.insertAdjacentHTML('beforeend','<div class="degraded">连接失败：'+esc(e.message)+'</div>'); }
+  finally{
+    $('#in').disabled=false;$('#btn').disabled=false;busy=false;scroll(); }
+}
+
+// 弹窗：展示某科室分析全文（无需 JS 内嵌中文，仅拼 HTML 字符串）。
+let _modal=null;
+function openModal(title, body){
+  if(_modal){_modal.remove();_modal=null;}
+  _modal=document.createElement('div');_modal.className='ovl';
+  _modal.innerHTML='<div class="modal"><div class="mhead"><b>'+esc(title)+'</b><button class="mclose" aria-label="关闭">×</button></div><div class="mbody"></div></div>';
+  _modal.querySelector('.mbody').textContent=body||'';   // textContent 保证换行与安全
+  _modal.querySelector('.mclose').onclick=closeModal;
+  _modal.addEventListener('click',e=>{if(e.target===_modal)closeModal();});
+  document.body.appendChild(_modal);
+  scroll();
+}
+function closeModal(){ if(_modal){_modal.remove();_modal=null;} }
+
+// 浏览器端 PDF 导出：纯前端 print()，无后端依赖；版式规整，只含核心就医信息。
+function downloadPdf(bot, d){
+  const t=[]
+  const S=(label,val)=>{t.push('<div class="rv"><span class="rl">'+label+'</span><div class="rvv">'+val+'</div></div>');}
+  // 主诉 / 病史
+  S('患者主诉', esc(bot.dataset.chief||'—'));
+  if(bot.dataset.history) S('补充病史', esc(bot.dataset.history));
+  // 会诊结论
+  t.push('<div class="rsect">会诊结论</div>');
+  S('主要结论', esc(d.primary||d.summary||'—'));
+  S('建议科室', esc(d.department||'—'));
+  S('把握度', Math.round((d.confidence||0)*100)+'%');
+  // 紧急提醒（若有）
+  if(d.urgent){ t.push('<div class="rurgent">⚠️ 紧急就医提醒：'+esc(d.urgent_advice||'请立即就医')+'</div>'); }
+  // 分歧 / 建议检查
+  if((d.conflicts||[]).length){ t.push('<div class="rsect">各方分歧</div>'); (d.conflicts||[]).forEach(c=>t.push('<div class="rli">· '+esc(c)+'</div>')); }
+  if((d.check_items||[]).length){ t.push('<div class="rsect">建议检查</div>'); (d.check_items||[]).forEach(c=>t.push('<div class="rli">· '+esc(c)+'</div>')); }
+  // 免责
+  t.push('<div class="rdisc">'+(d.disclaimers||[]).map(esc).join(' ')+'</div>');
+  const title='就医会诊报告_'+Date.now();
+  const frame=document.createElement('iframe'); frame.style='position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+  frame.srcdoc='<html><head><meta charset="utf-8"><title>'+esc(title)+'</title><style>'+
+    '@page{margin:0}'+
+    'body{font-family:"Microsoft YaHei","PingFang SC",sans-serif;font-size:13px;line-height:1.7;color:#22303c;padding:30px 36px}'+
+    '.rtitle{font-size:20px;font-weight:700;color:#0d5e97;letter-spacing:1px;padding-bottom:10px;border-bottom:2px solid #1274b8;margin-bottom:18px}'+
+    '.rsect{font-size:14px;font-weight:700;color:#1274b8;margin:20px 0 8px;padding-left:10px;border-left:4px solid #1274b8}'+
+    '.rv{display:flex;gap:12px;margin:7px 0;padding:8px 12px;background:#f6f9fb;border-radius:6px}'+
+    '.rl{flex:0 0 76px;color:#66727e;font-weight:600;font-size:12px;line-height:1.6}'+
+    '.rvv{flex:1;color:#22303c;line-height:1.7}'+
+    '.rli{margin:5px 0;padding-left:4px;color:#38434d}'+
+    '.rurgent{background:#fdf4f2;border:1px solid #f6d8d2;color:#c0392b;font-weight:600;padding:11px 14px;border-radius:8px;margin:14px 0}'+
+    '.rdisc{margin-top:26px;padding-top:12px;border-top:1px dashed #cdd6dd;font-size:11px;color:#66727e;line-height:1.7}'+
+    '</style></head><body><div class="rtitle">就医会诊报告</div>'+(t.join(''))+'</body></html>';
+  document.body.appendChild(frame);
+  frame.onload=()=>{ try{ frame.contentWindow.focus(); frame.contentWindow.print(); } finally{ setTimeout(()=>frame.remove(), 4000); } };
+}
+
+function renderFinal(bot,d,secText){
+  secText=secText||{};
+  const conflicts=(d.conflicts||[]).map(c=>`<li>${esc(c)}</li>`).join('');
+  const checks=(d.check_items||[]).map(c=>`<li>${esc(c)}</li>`).join('');
+  let h=`<div class="card"><h4>会诊结论</h4>
+    <p class="rowline"><b>${esc(d.primary||d.summary||'')}</b></p>
+    <p>科室建议：<b>${esc(d.department||'—')}</b></p>
+    <p>把握度：${Math.round((d.confidence||0)*100)}%</p>
+    ${d.urgent?`<div class="urgent">${esc(d.urgent_advice||'请立即就医')}</div>`:''}
+  </div>`;
+  if(conflicts)h+=`<div class="card"><h4>各方分歧(显式暴露)</h4><ul style="margin:4px 0 0;padding-left:18px">${conflicts}</ul></div>`;
+  if(checks)h+=`<div class="card"><h4>建议检查</h4><ul style="margin:4px 0 0;padding-left:18px">${checks}</ul></div>`;
+
+  // —— 各科分析按钮区：不铺面，点开弹窗看全文 ——
+  const phases=Object.keys(secText).filter(k=>secText[k]&&secText[k].trim());
+  if(phases.length){
+    h+='<div class="card"><h4>各科会诊分析</h4><div class="seccards">'+
+       phases.map(k=>`<button class="seccard-btn" data-sec="${esc(k)}"><b>${esc(PH[k]||k)}</b> <span style="color:var(--sub)">查看</span></button>`).join('')+
+       '</div></div>';
+  }
+
+  // —— 下载 PDF 按钮 ——
+  h+=`<div class="row" style="padding-top:4px"><button class="pdfbtn" id="_pd">⬇ 下载 PDF 报告</button></div>`;
+  h+=`<div class="disc">${(d.disclaimers||[]).map(esc).join(' ')}</div>`;
+  bot.insertAdjacentHTML('beforeend',h);
+  // 记录主诉/病史到 bot data，供 PDF 取用
+  bot.dataset.chief=chief; bot.dataset.history=ctx.replace(/^主诉：/,'');
+  // 绑定各科分析弹窗
+  bot.querySelectorAll('.seccard-btn').forEach(btn=>{
+    btn.onclick=()=>{ const k=btn.getAttribute('data-sec'); openModal((PH[k]||k)+' 分析', secText[k]); };
+  });
+  // 绑定 PDF 下载
+  const pd=bot.querySelector('#_pd'); if(pd) pd.onclick=()=>downloadPdf(bot,d);
+}
+
+// 输入框回车或点「开始会诊」：以输入内容作为主诉发起新会话。
+function send(){
+  const q=$('#in').value.trim();
+  if(q){ $('#in').value=''; ask(q,true); }
+}
+$('#btn').onclick=()=>{ const q=$('#in').value.trim(); if(q){ $('#in').value=''; ask(q,true); } };
+
+/* ---------- 设置(API) ---------- */
+function openSettings(){
+  $('#set-key').value=''; $('#set-base').value=''; $('#set-model').value='';
+  const m=$('#set-msg'); m.textContent=''; m.className='set-msg ok';
+  $('#set-mask').classList.add('show');
+  setTimeout(()=>$('#set-key').focus(),50);
+}
+function closeSettings(){ $('#set-mask').classList.remove('show'); }
+async function saveSettings(){
+  const key=$('#set-key').value.trim();
+  const base=$('#set-base').value.trim();
+  const model=$('#set-model').value.trim();
+  const m=$('#set-msg');
+  if(!key){ m.textContent='请填写 API Key'; m.className='set-msg err'; return; }
+  if(!base){ m.textContent='请填写 API Base URL（支持任意 OpenAI 兼容端点）'; m.className='set-msg err'; return; }
+  if(!/^https:\/\//i.test(base)){ m.textContent='API Base URL 必须为 https 开头'; m.className='set-msg err'; return; }
+  if(!model){ m.textContent='请填写模型名'; m.className='set-msg err'; return; }
+  const btn=$('#set-save'); btn.disabled=true; btn.textContent='保存中…';
+  m.textContent=''; m.className='set-msg ok';
+  try{
+    const r=await fetch('/api/config/llm',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({LLM_KEY:key,LLM_BASE_URL:base,LLM_TEXT_MODEL:model})});
+    const j=await r.json();
+    if(!r.ok||!j.ok){ m.textContent=j.error||'保存失败'; m.className='set-msg err'; return; }
+    m.textContent='✅ 已保存并热更新，服务无需重启。'; m.className='set-msg ok';
+    $('#hdr-gear').classList.remove('unset');
+    setTimeout(closeSettings,1200);
+  }catch(e){ m.textContent='请求失败: '+e; m.className='set-msg err'; }
+  finally{ btn.disabled=false; btn.textContent='保存'; }
+}
+</script></body></html>

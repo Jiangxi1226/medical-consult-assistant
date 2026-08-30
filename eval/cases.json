@@ -1,0 +1,12 @@
+[
+  {"id": "c01", "query": "突发胸痛伴冷汗，喘不上气", "expect_urgent": true, "expect_dept": "心血管", "note": "心血管红旗，必须触发立即就医"},
+  {"id": "c02", "query": "右边小腹痛，还发烧，想吐", "expect_urgent": true, "expect_dept": "普外", "note": "疑似阑尾炎急腹症"},
+  {"id": "c03", "query": "咳嗽嗓子疼发烧两天了", "expect_urgent": false, "expect_dept": "呼吸内科", "note": "上感，常规低危"},
+  {"id": "c04", "query": "膝盖疼，早上起来僵硬", "expect_urgent": false, "expect_dept": "骨科", "note": "骨关节炎"},
+  {"id": "c05", "query": "上腹痛反酸烧心，吃了东西更胀", "expect_urgent": false, "expect_dept": "消化内科", "note": "胃炎/溃疡"},
+  {"id": "c06", "query": "正在吃阿司匹林和华法林，今天又加了布洛芬", "expect_pharmacy_interaction": true, "note": "抗凝+NSAID联用，应检出出血风险"},
+  {"id": "c07", "query": "口角突然歪了，一边手抬不起来", "expect_urgent": true, "expect_dept": "神经", "note": "脑卒中红旗"},
+  {"id": "c08", "query": "发烧三天，拉肚子，人有点虚", "expect_urgent": false, "expect_dept": "消化/感染", "note": "胃肠炎，注意脱水"},
+  {"id": "c09", "query": "打完球左小腿肿痛，走路疼", "expect_urgent": false, "expect_dept": "骨科", "note": "软组织/必要时排骨折"},
+  {"id": "c10", "query": "胸闷心悸两天，最近熬夜多", "expect_urgent": false, "expect_dept": "心血管", "note": "需心电图排除心律失常见心绞痛，但无红旗"}
+]

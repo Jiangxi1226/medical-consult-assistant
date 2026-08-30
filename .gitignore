@@ -1,0 +1,13 @@
+__pycache__/
+.pytest_cache/
+*.pyc
+*.pyo
+.env
+*.log
+*.jsonl
+data/audit.jsonl
+eval/results.json
+venv/
+.venv/
+.DS_Store
+Thumbs.db
