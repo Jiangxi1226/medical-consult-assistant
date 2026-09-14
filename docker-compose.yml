@@ -1,0 +1,36 @@
+# 医疗会诊多智能体 — Docker Compose 编排
+#
+# 用法：
+#   docker compose up -d          # 构建并启动（http://localhost:8001）
+#   docker compose logs -f        # 跟踪日志
+#   docker compose down           # 停止并移除容器（挂载的数据保留）
+#
+# 前置：项目根已存在 .env（含 LLM_BASE_URL / LLM_API_KEY / LLM_TEXT_MODEL）。
+#       cp .env.example .env 后填入真实值 —— 与「启动.bat」的要求一致。
+
+services:
+  medical-assistant:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: medical-assistant:latest
+    container_name: medical-assistant
+    env_file:
+      - .env
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "8001"
+      PYTHONUNBUFFERED: "1"
+    ports:
+      - "8001:8001"
+    volumes:
+      # 挂载 data 目录：既复用业务知识库 data/kb/*.json，
+      # 又让审计记录 data/audit.jsonl 落到宿主机（容器重建不丢审计）。
+      - ./data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3

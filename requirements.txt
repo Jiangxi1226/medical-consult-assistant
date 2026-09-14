@@ -1,0 +1,19 @@
+# 医疗会诊多智能体 — 依赖清单
+# pip install -r requirements.txt
+#
+# 说明：本清单由项目实际 import 反推（此前项目缺 requirements.txt，
+# 换机部署只能靠手动试错）。未引入任何新依赖，仅显式声明已有依赖。
+
+# === LLM API（任意 OpenAI 兼容端点：DeepSeek / 通义 / Kimi / 本地 vLLM）===
+openai>=1.0.0
+
+# === 多智能体编排（分诊→并行会诊→仲裁的状态图）===
+langgraph>=0.2.0
+
+# === Web 服务（FastAPI 入口 + SSE 流式会诊）===
+fastapi>=0.100.0
+uvicorn>=0.30.0
+pydantic>=2.0.0
+
+# === 测试 ===
+pytest>=8.0.0

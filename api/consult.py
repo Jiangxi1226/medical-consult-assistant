@@ -8,8 +8,10 @@
   error  → 异常
 安全：输入经 ContentFilter 注入扫描；限流在 middleware。
 """
+import asyncio
 import json
-from fastapi import APIRouter
+import threading
+from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse, JSONResponse
 
 from core.security_guard import scan_input  # 复用注入过滤(基于项目一 security)
@@ -24,7 +26,7 @@ def _sse(event: str, data: dict) -> str:
 
 
 @router.post("/v1/consult/stream")
-async def consult_stream(payload: dict):
+async def consult_stream(payload: dict, request: Request):
     # 输入类型/长度校验：非字符串或超长直接 400，避免 AttributeError 崩溃 / 撑爆 LLM context。
     raw = payload.get("query", "")
     if not isinstance(raw, str):
@@ -45,9 +47,26 @@ async def consult_stream(payload: dict):
     flag_risk = max([s.get("risk", "none") for s in (s1, s2)],
                     key=lambda r: {"none": 0, "medium": 1, "high": 2}.get(r, 0))
 
+    # 客户端断开的协同取消：SSE 断开后后端默认会继续跑完整个会诊（4 路并行 LLM），
+    # 纯烧 token。这里起一个轻量 watcher 轮询连接状态，断开即置位 stop_event，
+    # 由 stream_consult 在每个 token/阶段边界检查并尽快收尾。
+    stop_event = threading.Event()
+
+    async def _watch_disconnect():
+        try:
+            while not stop_event.is_set():
+                if await request.is_disconnected():
+                    stop_event.set()
+                    return
+                await asyncio.sleep(0.5)
+        except Exception:
+            pass
+
+    watcher = asyncio.create_task(_watch_disconnect())
+
     def gen():
         try:
-            for evt, data in stream_consult(safe_user, safe_ctx):
+            for evt, data in stream_consult(safe_user, safe_ctx, stop_event=stop_event):
                 if evt == "final":
                     yield _sse("final", data)
                     # 从 final 中取出附带的过程审计数据，避免 triage/internal 等字段记空。
@@ -81,5 +100,10 @@ async def consult_stream(payload: dict):
                 yield _sse("warn", {"message": msg})
         except Exception as e:
             yield _sse("error", {"error": str(e)[:300]})
+        finally:
+            # 正常结束或异常都要通知 watcher 退出（stop_event 置位 → 下一轮轮询即返回）。
+            # 保留 watcher 引用，避免未完成的 task 被 GC。
+            stop_event.set()
+            _ = watcher
 
     return StreamingResponse(gen(), media_type="text/event-stream")

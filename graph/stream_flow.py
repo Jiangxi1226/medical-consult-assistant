@@ -33,12 +33,19 @@ _STREAM_PROMPT = (
 )
 
 
-def _stream_one(phase: str, prompt: str, out_queue: queue.Queue) -> None:
-    """单科流式生成器：逐 token 送入队列，结束时回传该科完整文本供仲裁。"""
+def _stream_one(phase: str, prompt: str, out_queue: queue.Queue,
+                stop_event=None) -> None:
+    """单科流式生成器：逐 token 送入队列，结束时回传该科完整文本供仲裁。
+
+    stop_event：客户端断开的协同取消信号。每个 token 之间检查一次——一旦置位
+    立刻停止继续拉取，避免用户已经离开、后端还在烧 LLM。默认 None = 行为不变。
+    """
     text = ""
     try:
         llm = LLM()
         for tok in llm.chat_stream([{"role": "user", "content": prompt}], temperature=0.6):
+            if stop_event is not None and stop_event.is_set():
+                break
             text += tok
             out_queue.put(("token", phase, tok))
     except Exception as e:
@@ -47,14 +54,20 @@ def _stream_one(phase: str, prompt: str, out_queue: queue.Queue) -> None:
         out_queue.put(("done", phase, text))
 
 
-def stream_consult(user_input: str, context: str = ""):
+def stream_consult(user_input: str, context: str = "", stop_event=None):
     """同步生成器，逐项 yield (event, data)。事件：
       urgent : {red_flags, advice}   红旗命中（尽早高亮，不问诊直接会诊）
       ask    : {questions:[{text,options}]}  首轮信息不足，先向患者追问关键症状
       token  : {phase, t}            打字机逐字
       final  : final_report dict     结构化结案（任何情况下都尽力送达，降级而非消失）
       error  : {error}               仅内部灾难性异常（理论不应出现）
+
+    stop_event：可选的协同取消信号（threading.Event）。客户端断开时由 API 层置位，
+    本生成器在每个关键节点检查它并尽快收尾返回，不再发起新的 LLM 调用。
     """
+    def _stopped() -> bool:
+        return stop_event is not None and stop_event.is_set()
+
     # context 为上一轮采集到的病史补充；拼接后作为完整"患者信息"用于安全预检与各科会诊。
     text = (user_input or "").strip()
     full_text = (" ".join(x for x in (context, text) if x)).strip() or text
@@ -135,12 +148,14 @@ def stream_consult(user_input: str, context: str = ""):
     q = queue.Queue()
     pool = ThreadPoolExecutor(max_workers=4)
     for ph, p in prompts.items():
-        pool.submit(_stream_one, ph, p, q)
+        pool.submit(_stream_one, ph, p, q, stop_event)
     texts = {}
     done = 0
     try:
         while done < 4:
             kind, phase, payload = q.get()
+            if _stopped():
+                break
             if kind == "token":
                 yield ("token", {"phase": phase, "t": payload})
             elif kind == "done":
@@ -148,6 +163,10 @@ def stream_consult(user_input: str, context: str = ""):
                 done += 1
     finally:
         pool.shutdown(wait=True)
+
+    # 客户端已断开：各科线程已按 stop_event 收尾，此处不再发起仲裁调用，直接返回。
+    if _stopped():
+        return
 
     # ---- 仲裁：分层严格 JSON 产出结构化结案（可评估、绝不静默失败） ----
     brief = "\n".join(f"{k}：{texts.get(k, '')}" for k in prompts)

@@ -12,6 +12,8 @@ INJECTION_PATTERNS = [
     r"reveal\s+your\s+(system\s+)?instructions?",
     r"act\s+as\s+(if\s+you\s+are|a\s+different)",
     r"new\s+system\s+prompt",
+    r"from\s*now\s*on\s*you\s+(are|are\s*not)",
+    r"你\s*(现在是|现 在 是|现在就是)",
     r"从\s*现\s*在\s*开\s*始.*你\s*(是|扮演)",
     r"忽\s*略\s*(所有|之前|上面|以上|以上所有)\s*(的\s*)?(指令|指示|设定|规则|对话)",
     r"输出\s*(你的\s*)?(系统\s*)?(提示词|prompt|指令)",
@@ -35,6 +37,9 @@ _HIGH_RISK_PATTERNS = [
     r"忽\s*略\s*(所有|之前|上面|以上).*",
     r"你\s*现\s*在\s*(是|扮演|变成)",
 ]
+# 预编译高危表——scan() 每次调用都要用它，逐次 re.search(p,...) 会重复编译，
+# 这里一次性编译，与 multimodal_rag/utils/security.py 的实现对齐。
+_HIGH_RISK_COMPILED = [re.compile(p, re.IGNORECASE) for p in _HIGH_RISK_PATTERNS]
 
 
 class ContentFilter:
@@ -57,7 +62,7 @@ class ContentFilter:
             return {"safe": True, "matches": [], "risk": "none"}
 
         # 命中高危指令(直接身份越权/角色扮演) → high；否则按命中数量 medium/high
-        high_hit = any(re.search(p, text, re.IGNORECASE) for p in _HIGH_RISK_PATTERNS)
+        high_hit = any(p.search(text) for p in _HIGH_RISK_COMPILED)
         if high_hit:
             risk = "high"
         elif len(matches) >= 2:
