@@ -58,11 +58,14 @@ class ContentFilter:
             if found:
                 matches.append(str(pattern.pattern)[:60])
 
-        if not matches:
+        # 高危表可能比通用表更宽（能覆盖通用表因紧邻结构而漏判的句式，如"忽略之前的
+        # 所有指令"）。必须先算 high_hit 再判空，否则这类句式会因 matches 为空被提前
+        # 判 safe，高危表形同虚设——与 multimodal_rag/utils/security.py 同步修复。
+        high_hit = any(p.search(text) for p in _HIGH_RISK_COMPILED)
+        if not matches and not high_hit:
             return {"safe": True, "matches": [], "risk": "none"}
 
         # 命中高危指令(直接身份越权/角色扮演) → high；否则按命中数量 medium/high
-        high_hit = any(p.search(text) for p in _HIGH_RISK_COMPILED)
         if high_hit:
             risk = "high"
         elif len(matches) >= 2:

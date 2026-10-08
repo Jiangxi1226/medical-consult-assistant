@@ -210,6 +210,7 @@ medical_assistant/
 ├── Dockerfile             # 多阶段构建镜像
 ├── docker-compose.yml     # 一键编排（数据卷挂载）
 ├── requirements.txt       # 依赖清单
+├── CHANGELOG.md           # 更新日志
 └── README.md
 ```
 
