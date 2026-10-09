@@ -1,6 +1,6 @@
 """会诊 LangGraph 编排。
 
-triage(分诊) → parallel_consult(内/外/药/风险 四路并行) → arbiter(仲裁) → END
+triage(分诊) → parallel_consult(临床科室按分诊动态选路 + 药剂/风险常驻横切) → arbiter(仲裁) → END
 每次调用用 new_state() 生成请求级隔离状态，并发请求互不影响。
 """
 from langgraph.graph import StateGraph, END

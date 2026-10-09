@@ -71,6 +71,9 @@ async def consult_stream(payload: dict, request: Request):
                     yield _sse("final", data)
                     # 从 final 中取出附带的过程审计数据，避免 triage/internal 等字段记空。
                     audit_data = data.get("_audit", {}) if isinstance(data, dict) else {}
+                    # 本轮路由：记录启动了哪几路，"未启用"与"跑了但空"必须在审计里可区分。
+                    _routing = audit_data.get("routing", {}) or {}
+                    _routed = _routing.get("depts", []) or []
                     try:
                         save_consult({
                             "user_input": user_input,
@@ -78,10 +81,11 @@ async def consult_stream(payload: dict, request: Request):
                             "final_report": {k: v for k, v in data.items() if k != "_audit"},
                             # 补齐各科/规则层数据，供审计复盘
                             "triage": audit_data.get("red_flags") and {"red_flags": audit_data.get("red_flags"), "chief_symptom": user_input} or {},
-                            "internal": {"candidates": audit_data.get("candidates", {}).get("internal", []), "dept_text": audit_data.get("dept_texts", {}).get("internal", "")},
-                            "surgical": {"candidates": audit_data.get("candidates", {}).get("surgical", []), "dept_text": audit_data.get("dept_texts", {}).get("surgical", "")},
-                            "pharmacy": {"interactions": audit_data.get("interactions", []), "dept_text": audit_data.get("dept_texts", {}).get("pharmacy", "")},
-                            "risk": {"red_flags": audit_data.get("red_flags", []), "dept_text": audit_data.get("dept_texts", {}).get("risk", "")},
+                            "routing": _routing,
+                            "internal": {"candidates": audit_data.get("candidates", {}).get("internal", []), "dept_text": audit_data.get("dept_texts", {}).get("internal", ""), "skipped": "internal" not in _routed},
+                            "surgical": {"candidates": audit_data.get("candidates", {}).get("surgical", []), "dept_text": audit_data.get("dept_texts", {}).get("surgical", ""), "skipped": "surgical" not in _routed},
+                            "pharmacy": {"interactions": audit_data.get("interactions", []), "dept_text": audit_data.get("dept_texts", {}).get("pharmacy", ""), "skipped": False},
+                            "risk": {"red_flags": audit_data.get("red_flags", []), "dept_text": audit_data.get("dept_texts", {}).get("risk", ""), "skipped": False},
                             "degraded": audit_data.get("degraded", False),
                         })
                     except Exception as e:

@@ -18,6 +18,7 @@ from core.prompts import _ARBITER, _CLARIFY
 from core.schemas import ArbitrationResult, ClarifyResult
 from utils.json_utils import strict_json
 from utils.kb_loader import check_red_flags, find_interactions, match_symptoms, extract_drugs
+from utils.dept_router import route_departments, route_reason, ALL_DEPTS, NAME
 
 
 def _fmt(cands) -> str:
@@ -136,15 +137,28 @@ def stream_consult(user_input: str, context: str = "", stop_event=None):
         except Exception:
             pass
 
-    # ---- 各科提示词：统一用 full_text（含历史补充），保证各科看到完整患者信息 ----
-    prompts = {
-        "internal": _STREAM_PROMPT.format(dept="内科", text=full_text, cand=_fmt(cand_internal)),
-        "surgical": _STREAM_PROMPT.format(dept="外科/骨科", text=full_text, cand=_fmt(cand_surgical)),
-        "pharmacy": _STREAM_PROMPT.format(dept="药剂", text=full_text, cand=f"相互作用线索：{inter or '无'}"),
-        "risk":     _STREAM_PROMPT.format(dept="风险", text=full_text, cand=f"红旗线索：{rf or '无'}"),
-    }
+    # ---- 科室路由：临床科室按知识库命中决定，药剂/风险为常驻横切关卡 ----
+    # 流式链路刻意不引入 LLM 分诊节点（实时体验优先），路由全部由规则层决定：
+    # 知识库症状命中即跑该科；命中红旗则全科室；两者都没有则保守全跑。
+    kb_depts = []
+    if cand_internal:
+        kb_depts.append("internal")
+    if cand_surgical:
+        kb_depts.append("surgical")
+    depts = route_departments(has_red_flag=bool(rf), kb_depts=kb_depts)
+    routing_reason = route_reason(depts, bool(rf), False)
 
-    # ---- 并发流式四科（线程池），主线程边收边转发 ----
+    # ---- 各科提示词：统一用 full_text（含历史补充），保证各科看到完整患者信息 ----
+    prompts = {}
+    if "internal" in depts:
+        prompts["internal"] = _STREAM_PROMPT.format(dept="内科", text=full_text, cand=_fmt(cand_internal))
+    if "surgical" in depts:
+        prompts["surgical"] = _STREAM_PROMPT.format(dept="外科/骨科", text=full_text, cand=_fmt(cand_surgical))
+    # 药剂审方与红旗预警：任何病例都要过，不参与路由
+    prompts["pharmacy"] = _STREAM_PROMPT.format(dept="药剂", text=full_text, cand=f"相互作用线索：{inter or '无'}")
+    prompts["risk"] = _STREAM_PROMPT.format(dept="风险", text=full_text, cand=f"红旗线索：{rf or '无'}")
+
+    # ---- 并发流式各科（线程池），主线程边收边转发。路数由路由决定，故按 len(prompts) 计数 ----
     q = queue.Queue()
     pool = ThreadPoolExecutor(max_workers=4)
     for ph, p in prompts.items():
@@ -152,7 +166,7 @@ def stream_consult(user_input: str, context: str = "", stop_event=None):
     texts = {}
     done = 0
     try:
-        while done < 4:
+        while done < len(prompts):
             kind, phase, payload = q.get()
             if _stopped():
                 break
@@ -170,6 +184,10 @@ def stream_consult(user_input: str, context: str = "", stop_event=None):
 
     # ---- 仲裁：分层严格 JSON 产出结构化结案（可评估、绝不静默失败） ----
     brief = "\n".join(f"{k}：{texts.get(k, '')}" for k in prompts)
+    # 未启用的科室显式告知仲裁：缺席是路由筛掉的，不等于该科无异常，避免被臆造结论。
+    skipped = [NAME[d] for d in ALL_DEPTS if d not in depts]
+    if skipped:
+        brief += f"\n本轮路由：{routing_reason}（{'、'.join(skipped)}本次未启用，非该科意见）"
     urgent = bool(rf)  # 红旗由规则层硬决定（医疗安全核心，不依赖 LLM）
     fallback_disc = "辅助导诊建议，不做诊断，请以线下医生为准。"
     try:
@@ -205,6 +223,7 @@ def stream_consult(user_input: str, context: str = "", stop_event=None):
         "candidates": {"internal": cand_internal, "surgical": cand_surgical},
         "interactions": inter or [],
         "dept_texts": texts,
+        "routing": {"depts": depts, "reason": routing_reason},
         "clarify_done": bool(texts),  # 进入过会诊即视为采集完成（未走 ask 分支）
         "degraded": not arb.get("primary", ""),
     }

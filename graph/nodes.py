@@ -18,6 +18,7 @@ from core.schemas import (
 )
 from utils.json_utils import strict_json
 from utils.kb_loader import check_red_flags, find_interactions, match_symptoms, extract_drugs
+from utils.dept_router import route_departments, route_reason, ALL_DEPTS
 
 
 def _audit(state, agent, ok, error="", extra=None):
@@ -140,20 +141,64 @@ def _risk_agent(state: dict) -> None:
 
 
 def parallel_consult(state: dict) -> dict:
-    """并行会诊：内科/外科/药剂/风险 四路同时跑，结果由主线程汇总写回(线程安全)。"""
+    """并行会诊：临床科室按分诊结果动态选路 + 药剂/风险常驻横切关卡。
+
+    两层次（对齐真实多学科会诊 MDT 结构）：
+      - 临床科室（内科 / 外科·骨科）是【变量】：由分诊的科室倾向决定跑哪几路。
+        分诊的价值正在于把不相关的科室筛掉——四路无条件全跑时分诊等于装饰。
+      - 药剂审方、红旗预警是【常量】：任何病例都要过，属流程安全关卡，不参与路由。
+    未被选中的科室显式标记 skipped，避免仲裁把"没跑"误读成"该科没意见"。
+    """
+    triage = state["triage"]
+    has_rf = bool(triage.get("red_flags"))
+    is_simple = bool(triage.get("is_simple", False))
+    # 知识库症状命中（确定性）作为路由的第一依据，LLM 分诊文本仅作回落。
+    kb_depts = []
+    if match_symptoms(state["user_input"], "internal"):
+        kb_depts.append("internal")
+    if match_symptoms(state["user_input"], "surgical"):
+        kb_depts.append("surgical")
+    depts = route_departments(
+        triage.get("department_hint", ""), triage.get("chief_symptom", ""),
+        is_simple, has_rf, kb_depts,
+    )
+    reason = route_reason(depts, has_rf, is_simple)
+    state["routing"] = {
+        "depts": depts, "reason": reason,
+        "skipped": [d for d in ALL_DEPTS if d not in depts],
+    }
+    for slot in ALL_DEPTS:
+        if slot not in depts:
+            state[slot]["done"] = True
+            state[slot]["skipped"] = True
+    _audit(state, "routing", True, "", {"depts": depts, "reason": reason})
+
     with ThreadPoolExecutor(max_workers=4) as ex:
-        futures = {
-            "internal": ex.submit(_dept_agent, state, "internal", "internal"),
-            "surgical": ex.submit(_dept_agent, state, "surgical", "surgical"),
-            "pharmacy": ex.submit(_pharmacy_agent, state),
-            "risk": ex.submit(_risk_agent, state),
-        }
+        futures = {slot: ex.submit(_dept_agent, state, slot, slot) for slot in depts}
+        futures["pharmacy"] = ex.submit(_pharmacy_agent, state)
+        futures["risk"] = ex.submit(_risk_agent, state)
         for f in futures.values():
             f.result()   # 收集异常
     return state
 
 
 # ---------------- 仲裁 ----------------
+def _slot_line(state: dict, key: str, label: str) -> str:
+    """把一个会诊槽位渲染成仲裁可读的一行。
+
+    关键：区分「本次未启用（分诊筛掉）」「会诊失败」「正常但结论为空」三态。
+    若用 `if v` 过滤空值，失败/未跑的科室会从仲裁视野里静默消失，
+    仲裁 LLM 便把"没有这一路"误读成"该科没意见"。
+    """
+    slot = state.get(key) or {}
+    if slot.get("skipped"):
+        return f"{label}：本次未启用（分诊筛掉的科室，非该科意见，勿据此断定该科无异常）"
+    if slot.get("degraded"):
+        return f"{label}：会诊失败，无有效结论（该科意见缺失，请在置信度上体现）"
+    res = slot.get("result") or {}
+    return f"{label}：{res}" if res else f"{label}：结论为空"
+
+
 def arbiter_node(state: dict) -> dict:
     t0 = time.perf_counter()
     ok, e = False, ""
@@ -161,24 +206,29 @@ def arbiter_node(state: dict) -> dict:
     # 分诊节点把 TriageResult 字段铺在 state["triage"] 顶层(没有 "result" 键)，
     # 故这里不能像各科一样读 .get("result")，否则分诊信息恒为空。直接读顶层字段。
     _triage = state["triage"]
-    parts = {
-        "分诊": {
-            "chief_symptom": _triage.get("chief_symptom", ""),
-            "department_hint": _triage.get("department_hint", ""),
-            "is_simple": _triage.get("is_simple", False),
-            "emergency": _triage.get("emergency", False),
-        },
-        "内科": state["internal"].get("result", {}),
-        "外科": state["surgical"].get("result", {}),
-        "药剂": state["pharmacy"].get("result", {}),
-        "风险": state["risk"].get("result", {}),
-    }
-    brief = "\n".join(f"{k}: {v}" for k, v in parts.items() if v)
+    triage_line = "分诊：" + str({
+        "chief_symptom": _triage.get("chief_symptom", ""),
+        "department_hint": _triage.get("department_hint", ""),
+        "is_simple": _triage.get("is_simple", False),
+        "emergency": _triage.get("emergency", False),
+    })
+    parts = [
+        triage_line,
+        _slot_line(state, "internal", "内科"),
+        _slot_line(state, "surgical", "外科/骨科"),
+        _slot_line(state, "pharmacy", "药剂"),
+        _slot_line(state, "risk", "风险"),
+    ]
+    # 路由依据一并交给仲裁：让它知道"某科缺席"是分诊筛掉的，而非漏诊。
+    routing = state.get("routing") or {}
+    if routing.get("reason"):
+        parts.append(f"本轮路由：{routing['reason']}")
+    brief = "\n".join(parts)
     try:
         llm = LLM()
         res = strict_json(
             llm,
-            f"{_ARBITER}\n\n患者主诉：{text}\n各方会诊结论：\n{brief or '均为空(已降级)'}\n请仲裁。",
+            f"{_ARBITER}\n\n患者主诉：{text}\n各方会诊结论：\n{brief}\n请仲裁。",
             output_model=ArbitrationResult,
         )
         ok = res.ok

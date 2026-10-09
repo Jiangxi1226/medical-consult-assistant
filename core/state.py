@@ -17,9 +17,14 @@ def new_state(user_input: str) -> dict:
         "user_context": {},            # 年龄/过敏史/既往史/用药等（输入脱敏后）
         # 分诊结果
         "triage": {"red_flags": [], "chief_symptom": "", "department_hint": ""},
+        # 本轮路由决策：启用了哪些临床科室、为什么(供审计与仲裁解释"某科为何缺席")
+        "routing": {"depts": [], "reason": "", "skipped": []},
         # 各科会诊（并行写入，互不覆盖）
-        "internal": {"done": False, "candidates": [], "evidence": [], "conflict": ""},
-        "surgical": {"done": False, "candidates": [], "evidence": [], "conflict": ""},
+        # skipped=True 表示该路由由分诊筛掉、本次未启动(非失败，仲裁勿当作"该科无意见")
+        "internal": {"done": False, "candidates": [], "evidence": [], "conflict": "",
+                     "skipped": False},
+        "surgical": {"done": False, "candidates": [], "evidence": [], "conflict": "",
+                     "skipped": False},
         "pharmacy": {"done": False, "interactions": [], "risk_notes": []},
         "risk": {"done": False, "red_flags": [], "advice": ""},
         # 仲裁结果
@@ -34,6 +39,7 @@ def new_state(user_input: str) -> dict:
 STATE_META = {
     "user_input": "患者主诉文本",
     "triage": "分诊台结果(红旗/主诉/科室提示)",
+    "routing": "本轮路由(启用了哪些科室及依据)",
     "internal": "内科会诊",
     "surgical": "外科/骨科会诊",
     "pharmacy": "药剂核对(用药/相互作用)",
