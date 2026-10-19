@@ -71,6 +71,12 @@ button:disabled{background:#b7c4cd;cursor:not-allowed}
 .askdone{font-size:12px;color:var(--sub);margin-top:10px}
 .status{font-size:12px;color:var(--sub);margin-top:8px}
 .status.eta{color:var(--green);font-weight:600;background:#e5f5f0;border-radius:8px;padding:5px 10px;display:inline-block}
+/* —— 会诊直播区：各科 token 逐字上屏（豆包式）—— */
+.live-wrap{display:flex;flex-direction:column;gap:10px;margin:6px 0 4px}
+.live-sec{border:1px solid var(--line);border-radius:10px;padding:10px 13px;background:#f9fbfc}
+.live-hd{font-size:12px;font-weight:600;color:var(--primary);letter-spacing:.3px;margin-bottom:6px;display:flex;align-items:center;gap:7px}
+.live-hd .live-dot{width:6px;height:6px;background:var(--primary);border-radius:50%;animation:pulse 1.4s infinite}
+.live-bd{font-size:13.5px;line-height:1.72;color:#38434d;white-space:pre-wrap;word-break:break-word}
 .pdfbtn{border:none;border-radius:11px;background:var(--green);color:#fff;font-weight:600;padding:12px 24px;cursor:pointer;font-size:14px;transition:filter .15s ease}
 .pdfbtn:hover{filter:brightness(1.08)}
 /* —— 各科分析折叠：结论卡下方按钮，点开弹窗 —— */
@@ -192,30 +198,55 @@ async function ask(answer, fresh){
     return card;
   };
 
+  // —— 会诊直播区：各科 token 逐字上屏（豆包式打字机）。按 phase 首现顺序建区，各科并发互不干扰 ——
+  const liveWrap=document.createElement('div'); liveWrap.className='live-wrap';
+  const liveEls={}; let liveShown=false;
+  const liveAppend=(ph,txt)=>{
+    if(!liveEls[ph]){
+      const sec=document.createElement('div'); sec.className='live-sec';
+      sec.innerHTML='<div class="live-hd"><span class="live-dot"></span><span class="hn"></span></div><div class="live-bd"></div>';
+      sec.querySelector('.hn').textContent=PH[ph]||ph;
+      liveEls[ph]=sec.querySelector('.live-bd');
+      liveWrap.appendChild(sec);
+      if(!liveShown){ bot.insertBefore(liveWrap, statusEl); liveShown=true; }
+    }
+    liveEls[ph].textContent+=txt;
+    scroll();
+  };
+
   // —— 解析 SSE：逐行累积 event/data，遇空行回调 ——
   let evt='', dataLines=[];
   const handle=(line)=>{
     const t=line.trim();
     if(t===''){ if(dataLines.length){ const d=JSON.parse(dataLines.join('\n'));
-      if(evt==='token'){ secText[d.phase]=(secText[d.phase]||'')+d.t; }
+      if(evt==='token'){ secText[d.phase]=(secText[d.phase]||'')+d.t; liveAppend(d.phase,d.t); }
       else if(evt==='urgent'){bot.insertAdjacentHTML('beforeend','<div class="urgent">⚠️ '+esc((d.red_flags||[]).join('、'))+'<br>'+esc(d.advice||'请立即就医')+'</div>');}
       else if(evt==='ask'){ stopEta(); note('请回答下面的问题'); bot.querySelector('.head').textContent='追问'; if(!/主诉：/.test(ctx))ctx=(ctx?ctx:'')+'主诉：'+(chief||u)+'。'; qList=d.questions||[]; qIdx=0; if(!renderNext())askNext(); }
-      else if(evt==='final'){stopEta();finalDone=true;bot.querySelector('.head').textContent='会诊结论';renderFinal(bot,d,secText);}
+      else if(evt==='final'){stopEta();finalDone=true;if(liveWrap.parentNode)liveWrap.remove();bot.querySelector('.head').textContent='会诊结论';renderFinal(bot,d,secText);}
       else if(evt==='warn'){bot.insertAdjacentHTML('beforeend','<div class="degraded">⚠️ '+esc(d.message)+'</div>');}
       else if(evt==='error'){stopEta();bot.insertAdjacentHTML('beforeend','<div class="degraded">❌ '+esc(d.error)+'</div>');}
     } evt='';dataLines=[]; }
     else if(t.startsWith('event:')){evt=t.slice(6).trim();}
     else if(t.startsWith('data:')){dataLines.push(t.slice(5).replace(/^\s+/,''));}
   };
+  // 逐行喂解析器（按 \n 切；保留空行以触发事件分发）
+  const feed=(chunk)=>{ for(const ln of chunk.split('\n')) handle(ln.replace(/\r$/,'')); };
 
   try{
     const r=await fetch('/api/v1/consult/stream',{method:'POST',headers:{'Content-Type':'application/json','Accept':'text/event-stream'},body:JSON.stringify(payload)});
     if(!r.ok)throw new Error('HTTP '+r.status);
-    // 分析期间显示静态"正在分析，请稍候…"提示。
-    // （真浏览器对 SSE 端点的 getReader 偶发收到 0 字节导致"没反应"，text() 稳定拿到完整 SSE，故用 text()。）
+    if(!r.body)throw new Error('浏览器不支持流式响应');
     startEta();
-    const txt=await r.text();
-    for(const ln of txt.split('\n')) handle(ln.replace(/\r$/,''));
+    // 增量读取：每个 SSE 块一到就解析并上屏，token 逐字可见（豆包式）。
+    const reader=r.body.getReader(), dec=new TextDecoder(); let buf='';
+    while(true){
+      const {done,value}=await reader.read();
+      if(done)break;
+      buf+=dec.decode(value,{stream:true});
+      let nl;
+      while((nl=buf.indexOf('\n'))>=0){ feed(buf.slice(0,nl)); buf=buf.slice(nl+1); }
+    }
+    if(buf)feed(buf);           // 收尾：处理结尾无换行的残留
     stopEta(); scroll();
     if(!finalDone && !bot.querySelector('.askq, .urgent, .degraded')){ bot.querySelector('.head').textContent='未完成'; bot.insertAdjacentHTML('beforeend','<div class="degraded">本次未生成结论，请重试或补充信息。</div>'); }
   }catch(e){ stopEta(); bot.insertAdjacentHTML('beforeend','<div class="degraded">连接失败：'+esc(e.message)+'</div>'); }

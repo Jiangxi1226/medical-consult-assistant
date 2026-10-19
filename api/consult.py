@@ -110,4 +110,12 @@ async def consult_stream(payload: dict, request: Request):
             stop_event.set()
             _ = watcher
 
-    return StreamingResponse(gen(), media_type="text/event-stream")
+    return StreamingResponse(
+        gen(),
+        media_type="text/event-stream; charset=utf-8",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",  # 反代(nginx)下禁用缓冲，保证 token 逐条到达浏览器
+        },
+    )
