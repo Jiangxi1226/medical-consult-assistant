@@ -17,6 +17,8 @@ data/sessions.db
 data/checkpoints.db
 data/*.db-wal
 data/*.db-shm
+# 链路追踪（含患者主诉与各科输出）
+data/traces/
 
 # —— 虚拟环境 / 系统文件 ——
 venv/

@@ -9,8 +9,10 @@
 与 graph/consultant_graph.py 的 run_consult 并存：本模块服务实时打字机，
 run_consult 服务于回归评估/审计（结构化完整链路）。
 """
+import os
 import queue
 import re
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 from core.llm import LLM
@@ -19,10 +21,21 @@ from core.schemas import ArbitrationResult, ClarifyResult
 from utils.json_utils import strict_json
 from utils.kb_loader import check_red_flags, find_interactions, match_symptoms, extract_drugs
 from utils.dept_router import route_departments, route_reason, ALL_DEPTS, NAME
+from utils.tracer import Trace, flatten
 
 
 def _fmt(cands) -> str:
     return "; ".join(f"{c['name']}(依据:{'/'.join(c['matched'])})" for c in cands) or "无"
+
+
+def _save_trace(trace, status: str = "ok") -> dict:
+    """结束并落盘追踪。任何异常都吞掉——观测不能拖垮会诊。"""
+    try:
+        summary = trace.finish(status)
+        trace.save()
+        return summary
+    except Exception:
+        return {}
 
 
 def _persist_question(session_id, question: str) -> None:
@@ -46,23 +59,49 @@ _STREAM_PROMPT = (
 
 
 def _stream_one(phase: str, prompt: str, out_queue: queue.Queue,
-                stop_event=None) -> None:
+                stop_event=None, span=None) -> None:
     """单科流式生成器：逐 token 送入队列，结束时回传该科完整文本供仲裁。
 
     stop_event：客户端断开的协同取消信号。每个 token 之间检查一次——一旦置位
     立刻停止继续拉取，避免用户已经离开、后端还在烧 LLM。默认 None = 行为不变。
+
+    span：该科的追踪 span（跨线程显式传入）。记录首字延迟 TTFT、
+    chunk 数与输出字符数——都是实测值，不做 token 估算。
     """
     text = ""
+    chunks = 0
+    usage: dict = {}
+    # 默认走原流式（零额外开销）；要量化成本时置 MEDICAL_STREAM_USAGE=1 采集真实 token
+    _want_usage = os.getenv("MEDICAL_STREAM_USAGE") == "1"
     try:
         llm = LLM()
-        for tok in llm.chat_stream([{"role": "user", "content": prompt}], temperature=0.6):
+        _gen = (llm.chat_stream_with_usage([{"role": "user", "content": prompt}],
+                                           temperature=0.6, usage_out=usage)
+                if _want_usage
+                else llm.chat_stream([{"role": "user", "content": prompt}], temperature=0.6))
+        for tok in _gen:
             if stop_event is not None and stop_event.is_set():
+                if span is not None:
+                    span.add_event("cancelled")
                 break
+            if chunks == 0 and span is not None:
+                span.set("ttft_ms", round((time.perf_counter() - span.start) * 1000, 1))
+            chunks += 1
             text += tok
             out_queue.put(("token", phase, tok))
     except Exception as e:
+        if span is not None:
+            span.add_event("exception", message=str(e)[:200])
+            span.finish("error")
         out_queue.put(("token", phase, f"\n[该科分析暂不可用：{str(e)[:120]}]"))
     finally:
+        if span is not None:
+            span.set("chunks", chunks)
+            span.set("chars", len(text))
+            if usage:
+                span.set("prompt_tokens", usage.get("prompt_tokens", 0))
+                span.set("completion_tokens", usage.get("completion_tokens", 0))
+            span.finish()
         out_queue.put(("done", phase, text))
 
 
@@ -87,6 +126,9 @@ def stream_consult(user_input: str, context: str = "", stop_event=None,
 
     # context 为上一轮采集到的病史补充；拼接后作为完整"患者信息"用于安全预检与各科会诊。
     text = (user_input or "").strip()
+
+    # 链路追踪（全程实测耗时，不做任何 token 估算）
+    trace = Trace("consult", session_id=session_id or "", input_chars=len(text))
 
     # ---- 会话恢复：库里的 context 优先（它比前端回传的更完整，且含断线前采到的信息） ----
     if session_id:
@@ -114,10 +156,14 @@ def stream_consult(user_input: str, context: str = "", stop_event=None,
     full_text = (" ".join(x for x in (context, text) if x)).strip() or text
 
     # ---- 规则层安全预检（快速、不依赖 LLM，红旗/禁忌硬保证） ----
-    rf = check_red_flags(full_text)
-    inter = find_interactions(extract_drugs(full_text))
-    cand_internal = match_symptoms(full_text, "internal")
-    cand_surgical = match_symptoms(full_text, "surgical")
+    with trace.span("precheck") as _sp:
+        rf = check_red_flags(full_text)
+        inter = find_interactions(extract_drugs(full_text))
+        cand_internal = match_symptoms(full_text, "internal")
+        cand_surgical = match_symptoms(full_text, "surgical")
+        _sp.set("red_flags", len(rf))
+        _sp.set("cand_internal", len(cand_internal))
+        _sp.set("cand_surgical", len(cand_surgical))
     if rf:
         yield ("urgent", {"red_flags": [r["name"] for r in rf], "advice": rf[0]["advice"]})
 
@@ -135,15 +181,18 @@ def stream_consult(user_input: str, context: str = "", stop_event=None,
                 f"内科候选方向：{_fmt(cand_internal) or '无'}\n"
                 f"外科候选方向：{_fmt(cand_surgical) or '无'}"
             )
-            cls = strict_json(
-                llm,
-                f"{_CLARIFY}\n\n患者主诉：{text}\n{cand_hint}\n"
-                f"请判断当前信息是否足够；不足则输出当前最关键的一组追问。",
-                output_model=ClarifyResult,
-            )
+            with trace.span("clarify") as _sp:
+                cls = strict_json(
+                    llm,
+                    f"{_CLARIFY}\n\n患者主诉：{text}\n{cand_hint}\n"
+                    f"请判断当前信息是否足够；不足则输出当前最关键的一组追问。",
+                    output_model=ClarifyResult,
+                )
+                _sp.set("need_clarify", bool(cls.ok and cls.data.need_clarify))
             if cls.ok and cls.data.need_clarify and cls.data.questions:
                 _persist_question(session_id,
                                   "；".join(q.text for q in cls.data.questions))
+                _save_trace(trace)
                 yield ("ask", {
                     "questions": [q.model_dump() for q in cls.data.questions],
                     "hint": "我会基于你的回答逐个追问，直到信息足够后进入会诊。",
@@ -163,16 +212,19 @@ def stream_consult(user_input: str, context: str = "", stop_event=None,
                 f"内科候选方向：{_fmt(cand_internal) or '无'}\n"
                 f"外科候选方向：{_fmt(cand_surgical) or '无'}"
             )
-            cls = strict_json(
-                llm,
-                f"{_CLARIFY}\n\n患者主诉：{text}\n{cand_hint}\n"
-                f"已采集到的回答：{context}。\n"
-                f"请判断当前信息是否已足够；不足则输出当前最关键的一组追问（1-2 道）。",
-                output_model=ClarifyResult,
-            )
+            with trace.span("clarify_round") as _sp:
+                cls = strict_json(
+                    llm,
+                    f"{_CLARIFY}\n\n患者主诉：{text}\n{cand_hint}\n"
+                    f"已采集到的回答：{context}。\n"
+                    f"请判断当前信息是否已足够；不足则输出当前最关键的一组追问（1-2 道）。",
+                    output_model=ClarifyResult,
+                )
+                _sp.set("need_clarify", bool(cls.ok and cls.data.need_clarify))
             if cls.ok and cls.data.need_clarify and cls.data.questions:
                 _persist_question(session_id,
                                   "；".join(q.text for q in cls.data.questions))
+                _save_trace(trace)
                 yield ("ask", {
                     "questions": [q.model_dump() for q in cls.data.questions],
                     "hint": "请继续回答下面的问题；信息足够后我会进入会诊。",
@@ -206,7 +258,8 @@ def stream_consult(user_input: str, context: str = "", stop_event=None,
     q = queue.Queue()
     pool = ThreadPoolExecutor(max_workers=4)
     for ph, p in prompts.items():
-        pool.submit(_stream_one, ph, p, q, stop_event)
+        # 跨线程显式传 span：threading.local 在线程池里拿不到父节点，树会断
+        pool.submit(_stream_one, ph, p, q, stop_event, trace.child(f"dept:{ph}"))
     texts = {}
     done = 0
     try:
@@ -224,6 +277,7 @@ def stream_consult(user_input: str, context: str = "", stop_event=None,
 
     # 客户端已断开：各科线程已按 stop_event 收尾，此处不再发起仲裁调用，直接返回。
     if _stopped():
+        _save_trace(trace, "cancelled")
         return
 
     # ---- 仲裁：分层严格 JSON 产出结构化结案（可评估、绝不静默失败） ----
@@ -236,12 +290,14 @@ def stream_consult(user_input: str, context: str = "", stop_event=None,
     fallback_disc = "辅助导诊建议，不做诊断，请以线下医生为准。"
     try:
         llm = LLM()
-        res = strict_json(
-            llm,
-            f"{_ARBITER}\n\n患者主诉：{full_text}\n各方会诊要点：\n{brief}\n请给出会诊结论。",
-            output_model=ArbitrationResult,
-        )
-        arb = res.data.model_dump() if res.ok else {}
+        with trace.span("arbiter") as _sp:
+            res = strict_json(
+                llm,
+                f"{_ARBITER}\n\n患者主诉：{full_text}\n各方会诊要点：\n{brief}\n请给出会诊结论。",
+                output_model=ArbitrationResult,
+            )
+            arb = res.data.model_dump() if res.ok else {}
+            _sp.set("ok", bool(res.ok))
     except Exception:
         arb = {}
     # 免责声明必带：LLM 显式空串也不允许覆盖默认文案。
@@ -270,6 +326,14 @@ def stream_consult(user_input: str, context: str = "", stop_event=None,
         "routing": {"depts": depts, "reason": routing_reason},
         "clarify_done": bool(texts),  # 进入过会诊即视为采集完成（未走 ask 分支）
         "degraded": not arb.get("primary", ""),
+    }
+
+    # 观测：整条链路的实测耗时落盘，并把摘要带进 final（前端可选择性展示 trace_id）
+    _trace_summary = _save_trace(trace, "degraded" if report["degraded"] else "ok")
+    report["_audit"]["trace"] = {
+        "trace_id": trace.trace_id,
+        "spans": flatten(_trace_summary),
+        "total_ms": _trace_summary.get("root", {}).get("duration_ms", 0),
     }
 
     # ---- 会话落库 + 人机协同闸门（HITL） ----

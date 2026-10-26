@@ -48,9 +48,37 @@ def _dept_hit(expect, actual, query, urgent):
     return False
 
 
+def _metrics(rows: list[dict]) -> dict:
+    """对一组样例算指标。分组统计是刻意的——对抗集专门打规则层边界，
+    混进主线会把真实能力指标拉花，两组必须分开看。"""
+    urgent_cases = [r for r in rows if r["exp_urgent"]]
+    nonurgent_cases = [r for r in rows if not r["exp_urgent"]]
+    recall = sum(r["urgent"] for r in urgent_cases) / len(urgent_cases) if urgent_cases else 1.0
+    false_alert = sum(r["urgent"] for r in nonurgent_cases) / len(nonurgent_cases) if nonurgent_cases else 0.0
+    dept_hits = sum(1 for r in rows
+                    if _dept_hit(r["expect_dept"], r["dept"], r["query"], r["urgent"]))
+    dept_total = sum(1 for r in rows if r["expect_dept"])
+    # 联用禁忌检出：只统计显式标注了 expect_interaction 的样例
+    inter_cases = [r for r in rows if r["expect_interaction"] is not None]
+    inter_rate = (sum(r["pharm"] == r["expect_interaction"] for r in inter_cases)
+                  / len(inter_cases)) if inter_cases else None
+    elapsed = [r["elapsed_s"] for r in rows]
+    return {
+        "样例数": len(rows),
+        "红旗样例数": len(urgent_cases),
+        "红旗召回率": round(recall, 3),
+        "紧急误报率": round(false_alert, 3),
+        "科室命中率": round(dept_hits / dept_total, 3) if dept_total else None,
+        "联用禁忌判定一致率": round(inter_rate, 3) if inter_rate is not None else None,
+        "降级样例数": sum(1 for r in rows if r["degraded"]),
+        "平均耗时s": round(sum(elapsed) / len(elapsed), 2) if elapsed else 0,
+        "最大耗时s": round(max(elapsed), 2) if elapsed else 0,
+    }
+
+
 def main():
     cases = _load("cases.json")
-    rows, timings = [], []
+    rows = []
 
     for c in cases:
         t0 = time.time()
@@ -65,32 +93,22 @@ def main():
         pharm = state.get("pharmacy", {}).get("interactions", []) or []
         pharm_hit = bool(pharm)
 
-        exp_urgent = c.get("expect_urgent", False)
         rows.append({
-            "id": c["id"], "query": c["query"],
-            "exp_urgent": exp_urgent, "urgent": urgent,
+            "id": c["id"], "query": c["query"], "split": c.get("split", "core"),
+            "exp_urgent": c.get("expect_urgent", False), "urgent": urgent,
             "dept": dept, "expect_dept": c.get("expect_dept", ""),
             "confidence": round(conf, 2), "degraded": degraded,
-            "pharm": pharm_hit, "elapsed_s": round(elapsed, 2),
+            "pharm": pharm_hit,
+            "expect_interaction": c.get("expect_interaction"),
+            "elapsed_s": round(elapsed, 2),
         })
-        timings.append(elapsed)
 
-    # ---- 指标 ----
-    urgent_cases = [r for r in rows if r["exp_urgent"]]
-    nonurgent_cases = [r for r in rows if not r["exp_urgent"]]
-    recall = sum(r["urgent"] for r in urgent_cases) / len(urgent_cases) if urgent_cases else 1.0
-    false_alert = sum(r["urgent"] for r in nonurgent_cases) / len(nonurgent_cases) if nonurgent_cases else 0.0
-    dept_hits = sum(1 for r in rows
-                    if _dept_hit(r["expect_dept"], r["dept"], r["query"], r["urgent"]))
-    dept_total = sum(1 for r in rows if r["expect_dept"])
+    core = [r for r in rows if r["split"] == "core"]
+    adv = [r for r in rows if r["split"] == "adversarial"]
     metrics = {
-        "cases": len(rows),
-        "红旗召回率": round(recall, 3),
-        "紧急误报率": round(false_alert, 3),
-        "科室命中率": round(dept_hits / dept_total, 3) if dept_total else 1.0,
-        "降级样例数": sum(1 for r in rows if r["degraded"]),
-        "平均耗时s": round(sum(timings) / len(timings), 2) if timings else 0,
-        "最大耗时s": round(max(timings), 2) if timings else 0,
+        "全部": _metrics(rows),
+        "核心集": _metrics(core),
+        "对抗集": _metrics(adv),
     }
 
     out = {"metrics": metrics, "cases": rows}
@@ -104,6 +122,9 @@ def main():
     for r in rows:
         if r["exp_urgent"] and not r["urgent"]:
             print(f"  ⚠ 红旗漏召回: {r['id']} {r['query']}")
+    for r in adv:
+        if r["urgent"] and not r["exp_urgent"]:
+            print(f"  ⚠ 对抗集误判紧急: {r['id']} {r['query']}")
 
 
 if __name__ == "__main__":

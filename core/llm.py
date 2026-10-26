@@ -109,6 +109,33 @@ class LLM:
                     and chunk.choices[0].delta.content:
                 yield chunk.choices[0].delta.content
 
+    def chat_stream_with_usage(self, messages: list[dict], temperature: float = 0.7,
+                               usage_out: dict | None = None):
+        """流式对话，并在末尾把**真实** token 用量写进 usage_out。
+
+        `stream_options.include_usage` 是 OpenAI 兼容扩展，并非所有端点都支持：
+        不支持时自动退回普通流式，usage_out 保持为空——**宁可不报，也不编造数字**。
+        拿到的是服务端返回的 prompt_tokens / completion_tokens，可直接算成本。
+        """
+        try:
+            stream = self.client.chat.completions.create(
+                model=self.model, messages=messages, temperature=temperature,
+                stream=True, stream_options={"include_usage": True})
+        except Exception:
+            # 端点不支持 include_usage → 回退，不抛错、不伪造用量
+            yield from self.chat_stream(messages, temperature=temperature)
+            return
+
+        for chunk in stream:
+            u = getattr(chunk, "usage", None)
+            if u is not None and usage_out is not None:
+                usage_out["prompt_tokens"] = getattr(u, "prompt_tokens", 0) or 0
+                usage_out["completion_tokens"] = getattr(u, "completion_tokens", 0) or 0
+                usage_out["total_tokens"] = getattr(u, "total_tokens", 0) or 0
+            # 带 usage 的末块 choices 为空，需判空后再取 content
+            if chunk.choices and chunk.choices[0].delta and chunk.choices[0].delta.content:
+                yield chunk.choices[0].delta.content
+
     def chat_with_image(self, text: str, image_input, temperature: float = 0.7) -> str:
         """多模态识图：走 DeepSeek 视觉模型（DEEPSEEK_IMAGE_MODEL）。
 

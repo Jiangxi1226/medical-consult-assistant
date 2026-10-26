@@ -1,12 +1,410 @@
 [
-  {"id": "c01", "query": "突发胸痛伴冷汗，喘不上气", "expect_urgent": true, "expect_dept": "心血管", "note": "心血管红旗，必须触发立即就医"},
-  {"id": "c02", "query": "右边小腹痛，还发烧，想吐", "expect_urgent": true, "expect_dept": "普外", "note": "疑似阑尾炎急腹症"},
-  {"id": "c03", "query": "咳嗽嗓子疼发烧两天了", "expect_urgent": false, "expect_dept": "呼吸内科", "note": "上感，常规低危"},
-  {"id": "c04", "query": "膝盖疼，早上起来僵硬", "expect_urgent": false, "expect_dept": "骨科", "note": "骨关节炎"},
-  {"id": "c05", "query": "上腹痛反酸烧心，吃了东西更胀", "expect_urgent": false, "expect_dept": "消化内科", "note": "胃炎/溃疡"},
-  {"id": "c06", "query": "正在吃阿司匹林和华法林，今天又加了布洛芬", "expect_pharmacy_interaction": true, "note": "抗凝+NSAID联用，应检出出血风险"},
-  {"id": "c07", "query": "口角突然歪了，一边手抬不起来", "expect_urgent": true, "expect_dept": "神经", "note": "脑卒中红旗"},
-  {"id": "c08", "query": "发烧三天，拉肚子，人有点虚", "expect_urgent": false, "expect_dept": "消化/感染", "note": "胃肠炎，注意脱水"},
-  {"id": "c09", "query": "打完球左小腿肿痛，走路疼", "expect_urgent": false, "expect_dept": "骨科", "note": "软组织/必要时排骨折"},
-  {"id": "c10", "query": "胸闷心悸两天，最近熬夜多", "expect_urgent": false, "expect_dept": "心血管", "note": "需心电图排除心律失常见心绞痛，但无红旗"}
+  {
+    "id": "c01",
+    "query": "突发胸痛伴冷汗，喘不上气",
+    "expect_urgent": true,
+    "expect_dept": "心血管",
+    "note": "心血管红旗，必须触发立即就医",
+    "split": "core"
+  },
+  {
+    "id": "c02",
+    "query": "右边小腹痛，还发烧，想吐",
+    "expect_urgent": true,
+    "expect_dept": "普外",
+    "note": "疑似阑尾炎急腹症",
+    "split": "core"
+  },
+  {
+    "id": "c03",
+    "query": "咳嗽嗓子疼发烧两天了",
+    "expect_urgent": false,
+    "expect_dept": "呼吸内科",
+    "note": "上感，常规低危",
+    "split": "core"
+  },
+  {
+    "id": "c04",
+    "query": "膝盖疼，早上起来僵硬",
+    "expect_urgent": false,
+    "expect_dept": "骨科",
+    "note": "骨关节炎",
+    "split": "core"
+  },
+  {
+    "id": "c05",
+    "query": "上腹痛反酸烧心，吃了东西更胀",
+    "expect_urgent": false,
+    "expect_dept": "消化内科",
+    "note": "胃炎/溃疡",
+    "split": "core"
+  },
+  {
+    "id": "c06",
+    "query": "正在吃阿司匹林和华法林，今天又加了布洛芬",
+    "expect_pharmacy_interaction": true,
+    "note": "抗凝+NSAID联用，应检出出血风险",
+    "split": "core"
+  },
+  {
+    "id": "c07",
+    "query": "口角突然歪了，一边手抬不起来",
+    "expect_urgent": true,
+    "expect_dept": "神经",
+    "note": "脑卒中红旗",
+    "split": "core"
+  },
+  {
+    "id": "c08",
+    "query": "发烧三天，拉肚子，人有点虚",
+    "expect_urgent": false,
+    "expect_dept": "消化/感染",
+    "note": "胃肠炎，注意脱水",
+    "split": "core"
+  },
+  {
+    "id": "c09",
+    "query": "打完球左小腿肿痛，走路疼",
+    "expect_urgent": false,
+    "expect_dept": "骨科",
+    "note": "软组织/必要时排骨折",
+    "split": "core"
+  },
+  {
+    "id": "c10",
+    "query": "胸闷心悸两天，最近熬夜多",
+    "expect_urgent": false,
+    "expect_dept": "心血管",
+    "note": "需心电图排除心律失常见心绞痛，但无红旗",
+    "split": "core"
+  },
+  {
+    "id": "c11",
+    "query": "突发胸痛，满头大汗，喘不上气",
+    "expect_urgent": true,
+    "expect_dept": "急诊科/心血管内科",
+    "split": "core",
+    "kb": "RF_CV_001"
+  },
+  {
+    "id": "c12",
+    "query": "夜里总是夜间憋醒，只能端坐呼吸",
+    "expect_urgent": true,
+    "expect_dept": "急诊科/心血管内科",
+    "split": "core",
+    "kb": "RF_CV_002"
+  },
+  {
+    "id": "c13",
+    "query": "我爸突然嘴歪，一侧麻木，说话含糊",
+    "expect_urgent": true,
+    "expect_dept": "急诊科/神经内科",
+    "split": "core",
+    "kb": "RF_NEURO_001"
+  },
+  {
+    "id": "c14",
+    "query": "右手手抬不起来，突然说话不清",
+    "expect_urgent": true,
+    "expect_dept": "急诊科/神经内科",
+    "split": "core",
+    "kb": "RF_NEURO_001"
+  },
+  {
+    "id": "c15",
+    "query": "肚子剧烈腹痛，按下去还有反跳痛",
+    "expect_urgent": true,
+    "expect_dept": "急诊科/普外科",
+    "split": "core",
+    "kb": "RF_ABD_001"
+  },
+  {
+    "id": "c16",
+    "query": "右下腹痛，有右下腹压痛，还发烧",
+    "expect_urgent": true,
+    "expect_dept": "急诊科/普外科",
+    "split": "core",
+    "kb": "RF_ABD_001"
+  },
+  {
+    "id": "c17",
+    "query": "早上呕血，还有柏油样便",
+    "expect_urgent": true,
+    "expect_dept": "急诊科/消化内科",
+    "split": "core",
+    "kb": "RF_GI_001"
+  },
+  {
+    "id": "c18",
+    "query": "咯血了，深呼吸时胸痛",
+    "expect_urgent": true,
+    "expect_dept": "急诊科/呼吸内科",
+    "split": "core",
+    "kb": "RF_RESP_001"
+  },
+  {
+    "id": "c19",
+    "query": "全身红肿伴喘憋，喉咙发紧",
+    "expect_urgent": true,
+    "expect_dept": "急诊科",
+    "split": "core",
+    "kb": "RF_ANAPH_001"
+  },
+  {
+    "id": "c20",
+    "query": "脸色发白，面色苍白伴出冷汗，人都意识不清",
+    "expect_urgent": true,
+    "expect_dept": "急诊科",
+    "split": "core",
+    "kb": "RF_SHOCK_001"
+  },
+  {
+    "id": "c21",
+    "query": "突发胸痛，有濒死感",
+    "expect_urgent": true,
+    "expect_dept": "急诊科/心血管内科",
+    "split": "core",
+    "kb": "RF_CV_001"
+  },
+  {
+    "id": "c22",
+    "query": "咳粉红色泡沫痰，双下肢浮肿伴喘憋",
+    "expect_urgent": true,
+    "expect_dept": "急诊科/心血管内科",
+    "split": "core",
+    "kb": "RF_CV_002"
+  },
+  {
+    "id": "c23",
+    "query": "口唇发紫，突然喘不上气",
+    "expect_urgent": true,
+    "expect_dept": "急诊科/呼吸内科",
+    "split": "core",
+    "kb": "RF_RESP_001"
+  },
+  {
+    "id": "c24",
+    "query": "小腹痛得厉害，还有点反跳痛，发烧",
+    "expect_urgent": true,
+    "expect_dept": "急诊科/普外科",
+    "split": "core",
+    "kb": "RF_ABD_001"
+  },
+  {
+    "id": "c25",
+    "query": "吐血了，还解大量黑便",
+    "expect_urgent": true,
+    "expect_dept": "急诊科/消化内科",
+    "split": "core",
+    "kb": "RF_GI_001"
+  },
+  {
+    "id": "c26",
+    "query": "突然叫不醒，脉搏细弱",
+    "expect_urgent": true,
+    "expect_dept": "急诊科",
+    "split": "core",
+    "kb": "RF_SHOCK_001"
+  },
+  {
+    "id": "c27",
+    "query": "我在吃华法林，最近牙疼又吃了布洛芬",
+    "expect_urgent": false,
+    "expect_dept": "",
+    "split": "core",
+    "expect_interaction": true,
+    "kb": "INT_ANTICOAG_NSAID"
+  },
+  {
+    "id": "c28",
+    "query": "华法林和氯吡格雷一起吃可以吗",
+    "expect_urgent": false,
+    "expect_dept": "",
+    "split": "core",
+    "expect_interaction": true,
+    "kb": "INT_ANTICOAG_ANTIPLATELET"
+  },
+  {
+    "id": "c29",
+    "query": "氟西汀和帕罗西汀能一起吃吗",
+    "expect_urgent": false,
+    "expect_dept": "",
+    "split": "core",
+    "expect_interaction": true,
+    "kb": "INT_SSRI_MAOI"
+  },
+  {
+    "id": "c30",
+    "query": "我在吃他汀，医生又开了贝特",
+    "expect_urgent": false,
+    "expect_dept": "",
+    "split": "core",
+    "expect_interaction": true,
+    "kb": "INT_STATIN_FIBRATE"
+  },
+  {
+    "id": "c31",
+    "query": "普利和沙坦一起吃行不行",
+    "expect_urgent": false,
+    "expect_dept": "",
+    "split": "core",
+    "expect_interaction": true,
+    "kb": "INT_ACEI_ARB"
+  },
+  {
+    "id": "c32",
+    "query": "头孢和甲硝唑一起吃可以吗",
+    "expect_urgent": false,
+    "expect_dept": "",
+    "split": "core",
+    "expect_interaction": true,
+    "kb": "INT_ANTIBIOTIC_METRONIDAZOLE"
+  },
+  {
+    "id": "c33",
+    "query": "地高辛和利尿剂一起吃，有点恶心",
+    "expect_urgent": false,
+    "expect_dept": "",
+    "split": "core",
+    "expect_interaction": true,
+    "kb": "INT_DIGOXIN_DIURETIC"
+  },
+  {
+    "id": "c34",
+    "query": "咳嗽嗓子疼，鼻塞流鼻涕",
+    "expect_urgent": false,
+    "expect_dept": "呼吸内科",
+    "split": "core",
+    "kb": "SYM_RESP_001"
+  },
+  {
+    "id": "c35",
+    "query": "上腹痛，反酸烧心，老嗳气",
+    "expect_urgent": false,
+    "expect_dept": "消化内科",
+    "split": "core",
+    "kb": "SYM_GI_001"
+  },
+  {
+    "id": "c36",
+    "query": "拉肚子，水样便，还有点发烧",
+    "expect_urgent": false,
+    "expect_dept": "消化内科",
+    "split": "core",
+    "kb": "SYM_GI_002"
+  },
+  {
+    "id": "c37",
+    "query": "心悸心慌，心跳快，最近熬夜多",
+    "expect_urgent": false,
+    "expect_dept": "心血管内科",
+    "split": "core",
+    "kb": "SYM_ENDO_001"
+  },
+  {
+    "id": "c38",
+    "query": "膝盖疼，早起僵硬，上下楼疼",
+    "expect_urgent": false,
+    "expect_dept": "骨科",
+    "split": "core",
+    "kb": "SYM_ORTHO_001"
+  },
+  {
+    "id": "c39",
+    "query": "打球崴脚了，肿痛，走路疼",
+    "expect_urgent": false,
+    "expect_dept": "骨科",
+    "split": "core",
+    "kb": "SYM_ORTHO_002"
+  },
+  {
+    "id": "c40",
+    "query": "右上腹痛，吃油腻的就疼，右肩放射",
+    "expect_urgent": false,
+    "expect_dept": "肝胆外科/消化内科",
+    "split": "core",
+    "kb": "SYM_ABD_003"
+  },
+  {
+    "id": "c41",
+    "query": "没有突发胸痛，就是有点胸闷",
+    "expect_urgent": false,
+    "expect_dept": "",
+    "split": "adversarial",
+    "note": "否定语境：'突发胸痛'被否定，规则仍会命中"
+  },
+  {
+    "id": "c42",
+    "query": "我妈早上突发胸痛送医院了，我自己没什么不舒服",
+    "expect_urgent": false,
+    "expect_dept": "",
+    "split": "adversarial",
+    "note": "第三人称：描述的是他人"
+  },
+  {
+    "id": "c43",
+    "query": "网上说突发胸痛要打120，我来问问是不是真的",
+    "expect_urgent": false,
+    "expect_dept": "",
+    "split": "adversarial",
+    "note": "引用/假设，非本人症状"
+  },
+  {
+    "id": "c44",
+    "query": "去年有过一次咯血，当时查了没事，现在好了",
+    "expect_urgent": false,
+    "expect_dept": "",
+    "split": "adversarial",
+    "note": "既往史已愈"
+  },
+  {
+    "id": "c45",
+    "query": "我没吃华法林也没吃布洛芬，只是想问问能不能一起吃",
+    "expect_urgent": false,
+    "expect_dept": "",
+    "split": "adversarial",
+    "expect_interaction": false,
+    "note": "否定用药，但联用咨询本身有意义"
+  },
+  {
+    "id": "c46",
+    "query": "最近工作压力大，失眠，胃口不好，偶尔有点心慌，没有胸痛也没有呼吸困难",
+    "expect_urgent": false,
+    "expect_dept": "",
+    "split": "adversarial",
+    "note": "长文本稀释"
+  },
+  {
+    "id": "c47",
+    "query": "疼得受不了，难受死了，也不知道哪儿的问题",
+    "expect_urgent": false,
+    "expect_dept": "",
+    "split": "adversarial",
+    "note": "情绪化描述，无具体症状词"
+  },
+  {
+    "id": "c48",
+    "query": "肚子疼得打滚，一直想上厕所",
+    "expect_urgent": false,
+    "expect_dept": "消化内科",
+    "split": "adversarial",
+    "note": "口语化非标准表达，kb 里没有'肚子疼得打滚'"
+  },
+  {
+    "id": "c49",
+    "query": "医生说不让我吃头孢，也没给我开甲硝唑",
+    "expect_urgent": false,
+    "expect_dept": "",
+    "split": "adversarial",
+    "expect_interaction": false,
+    "note": "否定用药 + 联用药名"
+  },
+  {
+    "id": "c50",
+    "query": "想开个长期病假条，需要什么材料",
+    "expect_urgent": false,
+    "expect_dept": "",
+    "split": "adversarial",
+    "note": "非医疗诉求，测兜底与不臆造"
+  }
 ]
