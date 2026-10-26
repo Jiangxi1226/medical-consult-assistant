@@ -312,7 +312,30 @@ medical_assistant/
 ### 评估与回归测试
 
 - **离线回归**（无需 LLM）：`python -m pytest tests/ -v`，共 **27 项**，覆盖红旗召回 / 误报、联用检出、分层严格 JSON 的 GATE 判定、注入防护、限流器、**流式断开取消**，全部为纯逻辑测试。
-- **端到端评估**（需 LLM）：`python eval/run_eval.py`，跑 `eval/cases.json` 用例集，量化红旗召回率、紧急误报率、科室命中率、降级样例数，结果落盘 `eval/results.json`（该文件为运行产物，已被 `.gitignore` 忽略）。
+- **端到端评估**（需 LLM）：`python eval/run_eval.py`，跑 `eval/cases.json`，结果落盘 `eval/results.json`（运行产物，已被 `.gitignore` 忽略）。
+
+#### 用例集：50 例，分两组看
+
+| 分组 | 数量 | 构成 | 用途 |
+|------|------|------|------|
+| **核心集** | 40 | 8 类红旗 ×2、7 条联用禁忌、12 个症状→科室映射 | 衡量主线能力 |
+| **对抗集** | 10 | 否定语境、第三人称、引用/假设、既往史、长文本稀释 | 打规则层的边界 |
+
+用例里每条 `kb` 字段都指向知识库中真实存在的信号词/禁忌条目，不是凭感觉写的。
+**两组指标分开报**——对抗集专门构造来让子串匹配出错，混进主线会把真实能力指标
+拉花，也会掩盖问题。对抗集上翻车不是丢人，是**把已知边界摆在明面上**。
+
+#### 延迟与成本：从追踪文件汇总实测值
+
+```bash
+python eval/run_eval.py                  # 产生追踪文件
+MEDICAL_STREAM_USAGE=1 python eval/run_eval.py   # 额外采集真实 token 用量
+python eval/cost_probe.py --price-in 2 --price-out 8   # 汇总 P50/P95 延迟与费用
+```
+
+`cost_probe.py` 只读 `data/traces/*.json` 里的实测值：总耗时、各科耗时、
+**首字延迟 TTFT**、真实 prompt/completion token。脚本**不内置任何厂商价格**——
+单价必须由调用方显式传入，没采集到 token 就如实报"未采集"，不做字数反推。
 
 ---
 
