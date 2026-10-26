@@ -9,6 +9,9 @@ openai>=1.0.0
 
 # === 多智能体编排（分诊→并行会诊→仲裁的状态图）===
 langgraph>=0.2.0
+# 会话 / 人工复核（interrupt）的检查点持久化：挂起的会诊重启后仍可恢复。
+# 未安装时会自动降级为内存 checkpointer（功能在，但重启丢挂起态），不影响启动。
+langgraph-checkpoint-sqlite>=2.0.0
 
 # === Web 服务（FastAPI 入口 + SSE 流式会诊）===
 fastapi>=0.100.0

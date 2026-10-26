@@ -205,9 +205,57 @@ docker compose up -d
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | `POST` | `/api/v1/consult/stream` | 提交主诉，流式返回多科会诊结果（SSE，分阶段推送） |
+| `GET` | `/api/v1/consult/session/{id}` | 恢复会话（断线重连用） |
+| `GET` | `/api/v1/consult/reviews` | 待医生复核的会话队列 |
+| `POST` | `/api/v1/consult/session/{id}/review` | 医生提交复核结论 |
+| `POST` | `/api/v1/consult/clinical/run` | 结构化会诊，在复核点**挂起等待医生确认** |
+| `GET` | `/api/v1/consult/clinical/{tid}` | 查询线程是否仍挂起及待复核内容 |
+| `POST` | `/api/v1/consult/clinical/{tid}/resume` | 提交结论，恢复被挂起的会诊 |
 | `POST` | `/api/config/llm` | 保存 / 更新 LLM 配置（热更新） |
 | `GET` | `/health` | 健康检查 |
 | `GET` | `/` | 会诊 Web 界面 |
+
+---
+
+## 💾 会话持久化与人机协同（HITL）
+
+### 1. 会话不再只活在前端
+
+此前多轮问诊的"已采集病史"靠前端把 `context`一路拼着回传，服务端零状态——
+用户第三轮断网，前面采到的信息全丢。现在会话落到 SQLite（`data/sessions.db`）：
+
+- `POST /v1/consult/stream` 首次请求会创建 `session_id`，随响应头 `X-Session-Id`
+  和 `final` 事件返回；
+- 后续请求带上 `session_id` 即可，**服务端从库里恢复历史，前端不必再拼 context**；
+- 断线后 `GET /v1/consult/session/{id}` 直接接上，卡片停在"第几问"也记得。
+
+### 2. 红旗结论不由系统自己宣布结案
+
+两条链路都接了人机协同，但机制不同：
+
+| 链路 | 机制 | 适用 |
+|------|------|------|
+| 流式（患者端） | 红旗结论落 `review_status=pending`，进复核队列 | 即时体验优先，医生异步复核 |
+| 结构化（`/clinical`） | LangGraph `interrupt()` **真正挂起整张图** | 高风险结论必须同步确认 |
+
+结构化链路的挂起态由 SQLite checkpointer 持久化——**等待期间服务重启也不会丢**，
+医生 `Command(resume=...)` 后图从原地继续到 END。被 `rejected` 的结论会打上
+`withheld` 标记，不会原样发布给患者。
+
+```bash
+# 1) 跑会诊 → 在复核点挂起
+curl -X POST localhost:8001/api/v1/consult/clinical/run \
+  -H 'Content-Type: application/json' -d '{"query":"胸痛伴出汗半小时"}'
+# → {"thread_id":"...","status":"pending_review","review_request":{...}}
+
+# 2) 医生确认 → 图续跑至结案
+curl -X POST localhost:8001/api/v1/consult/clinical/<tid>/resume \
+  -H 'Content-Type: application/json' \
+  -d '{"status":"approved","reviewer":"dr_wang","note":"同意立即就医"}'
+```
+
+> 评估/回归链路（`run_consult`）默认 `require_review=False`，一口气跑完，
+> 不受复核点影响——HITL 是**可选的外挂**，不是所有路径的强制关卡。
 
 ---
 

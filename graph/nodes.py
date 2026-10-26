@@ -268,3 +268,52 @@ def _build_report(state: dict, arb: dict) -> dict:
                                        state["pharmacy"], state["risk"], state["arbitration"])):
         report["degraded"] = True
     return report
+
+
+# ---------------- 人机协同：医生复核（LangGraph interrupt） ----------------
+def review_node(state: dict) -> dict:
+    """红旗 / 高风险结论必须经医生确认才能算结案。
+
+    `interrupt()` 会把整张图挂在这里，当前完整 state 由 checkpointer 落盘；
+    等待期间进程重启也不会丢——医生通过 `Command(resume={...})` 恢复时，
+    图从原地继续走到 END。
+
+    通过条件：state["require_review"] 为 False 时图根本不会连到这个节点
+    （见 consultant_graph 的条件边），因此评估链路不受影响。
+    """
+    from langgraph.types import interrupt
+
+    report = state.get("final_report") or {}
+    triage = state.get("triage") or {}
+    payload = {
+        "type": "clinical_review",
+        "red_flags": triage.get("red_flags", []),
+        "emergency": triage.get("emergency", False),
+        "summary": report.get("summary", ""),
+        "department": report.get("department", ""),
+        "question": "请医生确认该导诊结论是否可以发布给患者",
+    }
+
+    decision = interrupt(payload)   # ← 图在此挂起，直到 resume
+
+    if isinstance(decision, dict):
+        status = str(decision.get("status", "approved") or "approved")
+        reviewer = str(decision.get("reviewer", "") or "")
+        note = str(decision.get("note", "") or "")
+    else:
+        # resume 传了非 dict（如直接传 "approved"）也接受，保持宽容
+        status, reviewer, note = str(decision or "approved"), "", ""
+    if status not in ("approved", "rejected"):
+        status = "approved"
+
+    reviewed = {"status": status, "reviewer": reviewer, "note": note}
+    report = dict(report)
+    report["review"] = reviewed
+    # 被驳回的结论不允许原样发布给患者
+    if status == "rejected":
+        report["withheld"] = True
+
+    _audit(state, "review", status == "approved",
+           "" if status == "approved" else "医生驳回，结论不外发",
+           {"reviewer": reviewer})
+    return {"final_report": report, "review": reviewed}

@@ -15,6 +15,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse, JSONResponse
 
 from core.security_guard import scan_input  # 复用注入过滤(基于项目一 security)
+from core import session_store
 from utils.audit import save_consult
 from graph.stream_flow import stream_consult
 
@@ -36,6 +37,17 @@ async def consult_stream(payload: dict, request: Request):
         return JSONResponse(status_code=400, content={"detail": "context 必须为字符串。"})
     user_input = raw[:4000].strip()          # 主诉上限 4000 字
     context = context_raw[:8000].strip()     # 累计病史上限 8000 字
+
+    # 会话续接：带 session_id 且存在 → 服务端从 SQLite 恢复已采集历史（前端不必再拼 context）；
+    # 没带或查不到 → 新建一个，session_id 随 final 事件返回给前端保存。
+    req_session = payload.get("session_id", "")
+    if not isinstance(req_session, str):
+        return JSONResponse(status_code=400, content={"detail": "session_id 必须为字符串。"})
+    sess = session_store.get_session(req_session) if req_session else None
+    session_id = req_session if sess else session_store.create_session(
+        user_id=str(payload.get("user_id", "") or ""),
+        chief_complaint=user_input, context=context,
+    )
 
     # 注入扫描：命中则把净化后的文本传给会诊（指令词隔离为数据，不采纳），并单独发 warn。
     s1 = scan_input(user_input)
@@ -66,7 +78,8 @@ async def consult_stream(payload: dict, request: Request):
 
     def gen():
         try:
-            for evt, data in stream_consult(safe_user, safe_ctx, stop_event=stop_event):
+            for evt, data in stream_consult(safe_user, safe_ctx, stop_event=stop_event,
+                                            session_id=session_id):
                 if evt == "final":
                     yield _sse("final", data)
                     # 从 final 中取出附带的过程审计数据，避免 triage/internal 等字段记空。
@@ -117,5 +130,41 @@ async def consult_stream(payload: dict, request: Request):
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",  # 反代(nginx)下禁用缓冲，保证 token 逐条到达浏览器
+            "X-Session-Id": session_id,  # 断线后可用它恢复会话
         },
     )
+
+
+# ---------- 会话恢复（断线重续） ----------
+@router.get("/v1/consult/session/{session_id}")
+async def get_session_api(session_id: str):
+    """读取会话：已采集历史、当前状态、最终报告。前端刷新/重连时用它接上。"""
+    sess = session_store.get_session(session_id)
+    if not sess:
+        return JSONResponse(status_code=404, content={"detail": "会话不存在或已过期。"})
+    return sess
+
+
+# ---------- 人机协同：医生复核队列（HITL） ----------
+@router.get("/v1/consult/reviews")
+async def list_pending_reviews(limit: int = 50):
+    """待人工复核的会话列表。红旗结论在确认前一律留在这个队列里。"""
+    return {"items": session_store.list_pending_reviews(limit=max(1, min(limit, 200)))}
+
+
+@router.post("/v1/consult/session/{session_id}/review")
+async def submit_review(session_id: str, payload: dict):
+    """医生提交复核结论：approved（认可导诊建议）/ rejected（需重新会诊）。"""
+    status = str(payload.get("status", "")).strip()
+    if status not in ("approved", "rejected"):
+        return JSONResponse(status_code=400,
+                            content={"detail": "status 必须为 approved 或 rejected。"})
+    sess = session_store.get_session(session_id)
+    if not sess:
+        return JSONResponse(status_code=404, content={"detail": "会话不存在。"})
+    ok = session_store.set_review(
+        session_id, status,
+        reviewer=str(payload.get("reviewer", "") or "")[:64],
+        note=str(payload.get("note", "") or "")[:500],
+    )
+    return {"ok": ok, "session_id": session_id, "review_status": status}

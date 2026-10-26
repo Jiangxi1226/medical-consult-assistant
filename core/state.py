@@ -31,6 +31,10 @@ def new_state(user_input: str) -> dict:
         "arbitration": {"primary": "", "alternatives": [], "conflicts": [],
                         "confidence": 0.0, "department": "", "check_items": []},
         "final_report": {},
+        # 人机协同：True 时图在 review 节点用 interrupt() 挂起，等医生确认后才结案。
+        # 默认 False——评估/回归链路要求一口气跑完，不能被中断。
+        "require_review": False,
+        "review": {},                 # 医生复核结论 {status, reviewer, note}
         "error": "",
         "audit": [],                  # 每步 trace(agent/耗时/错误)，审计落盘
     }

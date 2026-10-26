@@ -17,12 +17,19 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from api import consult
+from api import clinical, consult
 from utils.security import RateLimiter
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # 会话表建表（幂等）。失败不阻断启动——会话持久化是增强能力，
+    # 挂了也应降级为"无状态会诊"而不是整个服务起不来。
+    try:
+        from core import session_store
+        session_store.init_db()
+    except Exception:
+        pass
     yield
 
 
@@ -67,6 +74,7 @@ async def rate_limit(request: Request, call_next):
 
 
 app.include_router(consult.router, prefix="/api")
+app.include_router(clinical.router, prefix="/api")
 
 _WEB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
 app.mount("/static", StaticFiles(directory=_WEB), name="static")

@@ -12,6 +12,11 @@ __pycache__/
 *.jsonl
 data/audit.jsonl
 eval/results.json
+# 会话库与 LangGraph 检查点：含患者主诉与会诊过程，属运行时隐私数据
+data/sessions.db
+data/checkpoints.db
+data/*.db-wal
+data/*.db-shm
 
 # —— 虚拟环境 / 系统文件 ——
 venv/

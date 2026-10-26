@@ -25,6 +25,17 @@ def _fmt(cands) -> str:
     return "; ".join(f"{c['name']}(依据:{'/'.join(c['matched'])})" for c in cands) or "无"
 
 
+def _persist_question(session_id, question: str) -> None:
+    """把本轮追问写进会话，供断线重连续问。无 session 或写失败都静默降级。"""
+    if not session_id:
+        return
+    try:
+        from core.session_store import append_question
+        append_question(session_id, question)
+    except Exception:
+        pass
+
+
 _STREAM_PROMPT = (
     "你是医疗导诊助手中的{dept}会诊智能体。基于下方患者主诉与知识库线索，"
     "用通俗口语逐步分析，说明该科视角的可能方向、需要进一步确认或检查什么。"
@@ -55,7 +66,8 @@ def _stream_one(phase: str, prompt: str, out_queue: queue.Queue,
         out_queue.put(("done", phase, text))
 
 
-def stream_consult(user_input: str, context: str = "", stop_event=None):
+def stream_consult(user_input: str, context: str = "", stop_event=None,
+                   session_id: str | None = None):
     """同步生成器，逐项 yield (event, data)。事件：
       urgent : {red_flags, advice}   红旗命中（尽早高亮，不问诊直接会诊）
       ask    : {questions:[{text,options}]}  首轮信息不足，先向患者追问关键症状
@@ -65,12 +77,40 @@ def stream_consult(user_input: str, context: str = "", stop_event=None):
 
     stop_event：可选的协同取消信号（threading.Event）。客户端断开时由 API 层置位，
     本生成器在每个关键节点检查它并尽快收尾返回，不再发起新的 LLM 调用。
+
+    session_id：可选。传了就把会话落到 SQLite（core/session_store）：断线重连、
+    服务端重启都能从库里的 context 续上；红旗结论落"待人工复核"(HITL)。
+    不传则行为与从前完全一致（无状态）。
     """
     def _stopped() -> bool:
         return stop_event is not None and stop_event.is_set()
 
     # context 为上一轮采集到的病史补充；拼接后作为完整"患者信息"用于安全预检与各科会诊。
     text = (user_input or "").strip()
+
+    # ---- 会话恢复：库里的 context 优先（它比前端回传的更完整，且含断线前采到的信息） ----
+    if session_id:
+        try:
+            from core.session_store import get_session, update_session
+            sess = get_session(session_id) or {}
+            stored = (sess.get("context") or "").strip()
+            if stored:
+                # 上一轮停在"问："上（患者还没来得及答）→ 本轮输入就是那个答案
+                last = stored.rstrip().rsplit("\n", 1)[-1]
+                if last.startswith("问：") and text:
+                    stored = stored.rstrip() + "\n答：" + text
+                    update_session(session_id,
+                                   turns=(sess.get("turns") or 0) + 1)
+                context = stored
+            elif context:
+                # 首次带 session 进来：把请求里的历史存进库
+                update_session(session_id, context=context,
+                               chief_complaint=sess.get("chief_complaint") or text)
+            update_session(session_id, status="consulting")
+        except Exception:
+            # 会话层故障不能影响会诊主流程（降级为无状态继续）
+            pass
+
     full_text = (" ".join(x for x in (context, text) if x)).strip() or text
 
     # ---- 规则层安全预检（快速、不依赖 LLM，红旗/禁忌硬保证） ----
@@ -102,6 +142,8 @@ def stream_consult(user_input: str, context: str = "", stop_event=None):
                 output_model=ClarifyResult,
             )
             if cls.ok and cls.data.need_clarify and cls.data.questions:
+                _persist_question(session_id,
+                                  "；".join(q.text for q in cls.data.questions))
                 yield ("ask", {
                     "questions": [q.model_dump() for q in cls.data.questions],
                     "hint": "我会基于你的回答逐个追问，直到信息足够后进入会诊。",
@@ -129,6 +171,8 @@ def stream_consult(user_input: str, context: str = "", stop_event=None):
                 output_model=ClarifyResult,
             )
             if cls.ok and cls.data.need_clarify and cls.data.questions:
+                _persist_question(session_id,
+                                  "；".join(q.text for q in cls.data.questions))
                 yield ("ask", {
                     "questions": [q.model_dump() for q in cls.data.questions],
                     "hint": "请继续回答下面的问题；信息足够后我会进入会诊。",
@@ -227,4 +271,24 @@ def stream_consult(user_input: str, context: str = "", stop_event=None):
         "clarify_done": bool(texts),  # 进入过会诊即视为采集完成（未走 ask 分支）
         "degraded": not arb.get("primary", ""),
     }
+
+    # ---- 会话落库 + 人机协同闸门（HITL） ----
+    # 红旗结论虽然已经即时高亮，但"是否已处置"必须由医生确认——落 pending 进复核队列，
+    # 而不是让系统自己宣布结案。普通结论直接 done。
+    review_required = bool(urgent)
+    report["session_id"] = session_id or ""
+    report["review_required"] = review_required
+    if session_id:
+        try:
+            from core.session_store import update_session
+            update_session(
+                session_id,
+                status="reviewing" if review_required else "done",
+                report=report,
+                risk_level="urgent" if urgent else "normal",
+                review_status="pending" if review_required else "",
+            )
+        except Exception:
+            pass
+
     yield ("final", report)
