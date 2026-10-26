@@ -25,6 +25,10 @@ import statistics
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TRACE_DIR = os.getenv("MEDICAL_TRACE_DIR", "") or os.path.join(_ROOT, "data", "traces")
 
+# 低于这个耗时的 trace 基本是 tracer 单测残渣或早期未埋点的空壳，计入会把
+# P50 拉到一个没人会信的数字上，直接跳过。
+MIN_VALID_MS = 50
+
 
 def _walk(node: dict):
     yield node
@@ -46,6 +50,9 @@ def _pct(values: list[float], p: float) -> float:
 def collect() -> dict:
     files = sorted(glob.glob(os.path.join(TRACE_DIR, "*.json")))
     totals, ttfts, dept_ms = [], [], []
+    # 追问轮次（只有 precheck + clarify，没走到会诊）和完整结案（有 arbiter）
+    # 的耗时是两个量级的东西，混在一起算 P50 没有意义，分开记。
+    full_ms, clarify_ms = [], []
     tok_in = tok_out = 0
     runs_with_usage = 0
     per_dept = {}
@@ -58,7 +65,15 @@ def collect() -> dict:
         root = data.get("root", {})
         if root.get("name") != "consult":
             continue
-        totals.append(root.get("duration_ms", 0))
+        dur = root.get("duration_ms", 0) or 0
+        if dur < MIN_VALID_MS:
+            continue
+        totals.append(dur)
+        child_names = {c.get("name") for c in root.get("children", []) or []}
+        if "arbiter" in child_names:
+            full_ms.append(dur)
+        elif "clarify" in child_names:
+            clarify_ms.append(dur)
         run_has_usage = False
         for node in _walk(root):
             name = node.get("name", "")
@@ -85,6 +100,13 @@ def collect() -> dict:
         "total_ms": {"p50": _pct(totals, 0.5), "p95": _pct(totals, 0.95),
                      "mean": round(statistics.fmean(totals), 1) if totals else 0.0,
                      "max": round(max(totals), 1) if totals else 0.0},
+        "full": {"runs": len(full_ms), "p50": _pct(full_ms, 0.5),
+                 "p95": _pct(full_ms, 0.95),
+                 "mean": round(statistics.fmean(full_ms), 1) if full_ms else 0.0,
+                 "min": round(min(full_ms), 1) if full_ms else 0.0,
+                 "max": round(max(full_ms), 1) if full_ms else 0.0},
+        "clarify": {"runs": len(clarify_ms), "mean": round(statistics.fmean(clarify_ms), 1)
+                    if clarify_ms else 0.0},
         "dept_ms": {"p50": _pct(dept_ms, 0.5), "p95": _pct(dept_ms, 0.95)},
         "ttft_ms": {"p50": _pct(ttfts, 0.5), "p95": _pct(ttfts, 0.95)},
         "tokens": {"prompt": tok_in, "completion": tok_out,
@@ -112,6 +134,11 @@ def main() -> None:
     print(f"会诊次数: {m['runs']}（其中 {m['runs_with_usage']} 次采集到真实 token 用量）")
     print(f"总耗时  P50={m['total_ms']['p50']}ms  P95={m['total_ms']['p95']}ms  "
           f"均值={m['total_ms']['mean']}ms  最大={m['total_ms']['max']}ms")
+    f = m["full"]
+    if f["runs"]:
+        print(f"  └ 完整结案 {f['runs']} 次: 均值={f['mean']}ms  区间={f['min']}-{f['max']}ms")
+    if m["clarify"]["runs"]:
+        print(f"  └ 追问轮次 {m['clarify']['runs']} 次: 均值={m['clarify']['mean']}ms")
     print(f"各科耗时 P50={m['dept_ms']['p50']}ms  P95={m['dept_ms']['p95']}ms")
     print(f"首字延迟 TTFT  P50={m['ttft_ms']['p50']}ms  P95={m['ttft_ms']['p95']}ms")
     print(f"Token 累计: 输入={m['tokens']['prompt']}  输出={m['tokens']['completion']}  "
