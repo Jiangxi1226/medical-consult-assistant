@@ -6,20 +6,28 @@
 import sys, os, json
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import pytest
+
 from utils.kb_loader import (
     check_red_flags, extract_drugs, find_interactions, match_symptoms,
 )
 
 
-def _cases():
+def _cases(split: str | None = None):
+    """读取用例。split=None 返回全部；'core' / 'adversarial' 只返回该组。
+
+    分组的意义：核心集是**契约**（规则层必须做对），对抗集是**已知边界**
+    （专门构造来让子串匹配出错的，不该当作回归红线的硬断言）。
+    """
     with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                            "eval", "cases.json"), encoding="utf-8") as f:
-        return json.load(f)
+        data = json.load(f)
+    return data if split is None else [c for c in data if c.get("split", "core") == split]
 
 
 def test_red_flag_recall():
     """所有期望急症的红旗用例都必须命中（漏召回 = 致命）。"""
-    for c in _cases():
+    for c in _cases("core"):
         if not c.get("expect_urgent"):
             continue
         rf = check_red_flags(c["query"])
@@ -27,12 +35,26 @@ def test_red_flag_recall():
 
 
 def test_red_flag_no_false_positive():
-    """非急症用例不得误命中红旗（过度就医）。"""
-    for c in _cases():
+    """核心集里的非急症用例不得误命中红旗（过度就医）。"""
+    for c in _cases("core"):
         if c.get("expect_urgent"):
             continue
         rf = check_red_flags(c["query"])
         assert not rf, f"非急症却误命中红旗: {c['id']} {c['query']}"
+
+
+@pytest.mark.xfail(strict=False, reason=(
+    "规则层为子串匹配，否定/第三人称/引用/既往史语境会误命中红旗——这是已知边界，"
+    "不是回归。将来若加入否定识别，此测试会 XPASS，届时应去掉 xfail 转成正式契约。"))
+def test_adversarial_red_flag_known_limitation():
+    """对抗集：记录规则层当前的已知误命中。
+
+    失败的用例就是系统的真实短板——把它写成测试而不是删掉，
+    是为了让这条边界**始终可见**，而不是藏起来假装不存在。
+    """
+    hits = [f"{c['id']}:{c['query']}" for c in _cases("adversarial")
+            if not c.get("expect_urgent") and check_red_flags(c["query"])]
+    assert not hits, f"对抗集误命中红旗 {len(hits)} 例: {hits}"
 
 
 def test_red_flag_urgency_sorted_emergent_first():

@@ -311,7 +311,11 @@ medical_assistant/
 
 ### 评估与回归测试
 
-- **离线回归**（无需 LLM）：`python -m pytest tests/ -v`，共 **27 项**，覆盖红旗召回 / 误报、联用检出、分层严格 JSON 的 GATE 判定、注入防护、限流器、**流式断开取消**，全部为纯逻辑测试。
+- **离线回归**（无需 LLM）：`python -m pytest tests/ -v`，共 **28 项**（27 通过 + 1 已知边界 xfail），覆盖红旗召回 / 误报、联用检出、分层严格 JSON 的 GATE 判定、注入防护、限流器、**流式断开取消**，全部为纯逻辑测试。
+
+  其中 `test_adversarial_red_flag_known_limitation` 是**故意标 xfail** 的：它断言对抗集不该误命中红旗，
+  而当前子串匹配在"没有突发胸痛"这类否定语境下确实会误命中。把它写成测试而非删掉，
+  是为了让这个边界始终可见——将来补上否定识别，它会 XPASS，届时去掉 xfail 转成正式契约。
 - **端到端评估**（需 LLM）：`python eval/run_eval.py`，跑 `eval/cases.json`，结果落盘 `eval/results.json`（运行产物，已被 `.gitignore` 忽略）。
 
 #### 用例集：50 例，分两组看
