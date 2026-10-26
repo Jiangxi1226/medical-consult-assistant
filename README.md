@@ -5,6 +5,7 @@
 **多科室并行会诊 · 严格 JSON 结构化输出 · 红旗症状强制就医拦截 · 用药禁忌交叉校验**
 
 <p>
+  <a href="https://github.com/Jiangxi1226/medical-consult-assistant/actions/workflows/tests.yml"><img alt="tests" src="https://github.com/Jiangxi1226/medical-consult-assistant/actions/workflows/tests.yml/badge.svg"></a>
   <img alt="Python" src="https://img.shields.io/badge/Python-3.11+-ffd43b?style=flat-square&logo=python&logoColor=white">
   <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-0.100+-009688?style=flat-square&logo=fastapi&logoColor=white">
   <img alt="LangGraph" src="https://img.shields.io/badge/LangGraph-orchestrator-1f9372?style=flat-square">
